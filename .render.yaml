@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: flask-support-webhook
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn main:app"
+    plan: free
