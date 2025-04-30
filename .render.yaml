@@ -1,7 +1,13 @@
 services:
   - type: web
-    name: flask-support-webhook
+    name: supportchat-middleware
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn main:app"
     plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app
+    envVars:
+      - key: ZULIP_BOT_EMAIL
+        value: placeholder
+      - key: ZULIP_API_KEY
+        value: placeholder
+
