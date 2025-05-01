@@ -7,7 +7,12 @@ services:
     startCommand: gunicorn main:app
     envVars:
       - key: ZULIP_BOT_EMAIL
-        value: placeholder
+        value: your-bot@zulip-domain
       - key: ZULIP_API_KEY
-        value: placeholder
+        value: your-zulip-bot-api-key
+      - key: ZULIP_SITE_URL
+        value: https://chat-test.filmlight.ltd.uk
+      - key: GLITCH_RELAY_URL
+        value: https://peppered-bubbly-glade.glitch.me/send
+
 
