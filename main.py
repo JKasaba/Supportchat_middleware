@@ -50,7 +50,7 @@ def receive_whatsapp():
 
     payload = {
         "type": "stream",
-        "to": "support",  # Adjust stream name as needed
+        "to": "rt-integration-test-channel",  # Adjust stream name as needed
         "topic": zulip_topic,
         "content": f"**{data['name']}**: {data['text']}"
     }
