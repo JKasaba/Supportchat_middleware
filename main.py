@@ -21,7 +21,7 @@ import os
 
 app = Flask(__name__)
 
-ZULIP_API_URL = "https://your-org.zulipchat.com/api/v1/messages"
+ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 ZULIP_BOT_EMAIL = os.environ.get("ZULIP_BOT_EMAIL")
 ZULIP_API_KEY = os.environ.get("ZULIP_API_KEY")
 ZULIP_STREAM = "rt-integration-test-channel"
