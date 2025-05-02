@@ -77,7 +77,11 @@ def receive_zulip():
 
     if topic and topic.startswith("whatsapp:") and content:
         phone_number = topic.split("whatsapp:")[1]
-        print("Forwarding to WhatsApp:", phone_number, content)
+
+        cleaned_message = content.replace("@**correspondence**", "").replace("@correspondence", "").strip()
+
+
+        print("Forwarding to WhatsApp:", phone_number, cleaned_message)
         resp = requests.post(WHATSAPP_SEND_ENDPOINT, json={
             "to": phone_number,
             "message": content
