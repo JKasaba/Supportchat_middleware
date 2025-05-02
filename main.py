@@ -68,17 +68,20 @@ def handle_whatsapp():
 
 @app.route("/webhook/zulip", methods=["POST"])
 def receive_zulip():
-    print("Received from Zulip:", request.json) 
     data = request.json
     topic = data.get("topic")
     message = data.get("content")
 
+    print("Received from Zulip:", topic, message)
+
     if topic and topic.startswith("whatsapp:") and message:
         phone_number = topic.split("whatsapp:")[1]
-        requests.post(WHATSAPP_SEND_ENDPOINT, json={
+        print("Forwarding to WhatsApp:", phone_number, message)
+        resp = requests.post(WHATSAPP_SEND_ENDPOINT, json={
             "to": phone_number,
             "message": message
         })
+        print("WhatsApp response:", resp.status_code, resp.text)
 
     return jsonify({"status": "delivered"})
 
