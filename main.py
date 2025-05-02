@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 import requests
+import time
 
 app = Flask(__name__)
 
@@ -50,11 +51,27 @@ def receive_zulip():
 
 
         print("Forwarding to WhatsApp:", phone_number, cleaned_message)
-        resp = requests.post(WHATSAPP_SEND_ENDPOINT, json={
-            "to": phone_number,
-            "message": cleaned_message
-        })
-        print("WhatsApp response:", resp.status_code, resp.text)
+        # resp = requests.post(WHATSAPP_SEND_ENDPOINT, json={
+        #     "to": phone_number,
+        #     "message": cleaned_message
+        # })
+        # print("WhatsApp response:", resp.status_code, resp.text)
+
+        for attempt in range(3):
+            try:
+                resp = requests.post(WHATSAPP_SEND_ENDPOINT, json={
+                    "to": phone_number,
+                    "message": cleaned_message
+                }, timeout=5)
+
+                print(f"Attempt {attempt + 1} WhatsApp response:", resp.status_code, resp.text)
+
+                if resp.status_code == 200:
+                    break
+            except Exception as e:
+                print(f"Attempt {attempt + 1} error:", e)
+
+            time.sleep(1)  # brief pause before retry
 
     return jsonify({"status": "delivered"})
 
