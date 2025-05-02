@@ -58,7 +58,7 @@ def handle_whatsapp():
     res = requests.post(ZULIP_API_URL, data={
         "type": "stream",
         "to": ZULIP_STREAM,
-        "subject": f"WA #{wa_from}",
+        "subject": f"whatsapp:{wa_from}",
         "content": zulip_msg
     }, auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY))
 
