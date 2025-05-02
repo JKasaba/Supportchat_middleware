@@ -65,34 +65,10 @@ def handle_whatsapp():
     print("Zulip response:", res.status_code, res.text)
     return jsonify({"status": "forwarded"}), 200
 
-# @app.route("/webhook/whatsapp", methods=["POST"])
-# def receive_whatsapp():
-#     data = request.json
-#     zulip_topic = f"whatsapp:{data['from']}"
-#     ZULIP_WHATSAPP_MAP[zulip_topic] = data["from"]  # cache mapping
-
-#     payload = {
-#         "type": "stream",
-#         "to": "rt-integration-test-channel",  # Adjust stream name as needed
-#         "topic": zulip_topic,
-#         "content": f"**{data['name']}**: {data['text']}"
-#     }
-
-#     headers = {
-#         "Content-Type": "application/x-www-form-urlencoded"
-#     }
-
-#     r = requests.post(
-#         f"{ZULIP_API_BASE}/messages",
-#         data={**payload, "api_key": ZULIP_BOT_TOKEN, "email": ZULIP_BOT_EMAIL},
-#         headers=headers
-#     )
-
-#     return jsonify({"status": "ok", "zulip_response": r.json()})
-
 
 @app.route("/webhook/zulip", methods=["POST"])
 def receive_zulip():
+    print("Received from Zulip:", request.json) 
     data = request.json
     topic = data.get("topic")
     message = data.get("content")
