@@ -12,7 +12,8 @@ services:
         value: your-zulip-bot-api-key
       - key: ZULIP_SITE_URL
         value: https://chat-test.filmlight.ltd.uk
-      - key: GLITCH_RELAY_URL
-        value: https://peppered-bubbly-glade.glitch.me/send
-
+      - key: GRAPH_API_TOKEN
+        value: your-graph-api-token
+      - key: WEBHOOK_VERIFY_TOKEN
+        value: your-webhook-verify-token
 
