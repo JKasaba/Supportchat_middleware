@@ -81,6 +81,32 @@ PORT                = int(os.getenv("PORT", 5000))       # Render sets this
 ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 ZULIP_STREAM  = "rt-integration-test-channel"
 
+
+
+# ─── helper: one place that actually calls the Graph API ──────────────────────
+def _do_send_whatsapp(to: str, msg: str):
+    log.info("⬆️  Bridge→WA  to=%s msg=%r", to, msg)
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": { "body": msg }
+    }
+    resp = requests.post(
+        "https://graph.facebook.com/v18.0/599049466632787/messages",
+        json = payload,
+        headers = {
+            "Authorization": f"Bearer {GRAPH_API_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        timeout = 10
+    )
+    log.info("WA API response status=%s body=%s", resp.status_code, resp.text)
+    return resp
+
+
+
 # -----------------------------------------------------------------------------#
 # 1.  WhatsApp webhook  (GET for verification, POST for messages)
 # -----------------------------------------------------------------------------#
@@ -148,38 +174,29 @@ def receive_whatsapp():
 # -----------------------------------------------------------------------------#
 # 2.  Outbound /send endpoint  (used by /webhook/zulip)                         #
 # -----------------------------------------------------------------------------#
+# --------------------------------------------------------------------------- #
+# 2. /send  – call helper above                                               #
+# --------------------------------------------------------------------------- #
 @app.post("/send")
 def send_whatsapp():
-    to  = request.json.get("to")
-    msg = request.json.get("message", "")
-    print("/send ⇢", { "to": to, "message": msg })
+    data = request.get_json(force=True) or {}
+    to  = data.get("to")
+    msg = data.get("message", "")
+    if not to or not msg:
+        return jsonify({"error": "to_and_message_required"}), 400
 
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": { "body": msg }
-    }
-    resp = requests.post(
-        "https://graph.facebook.com/v18.0/599049466632787/messages",
-        json = payload,
-        headers = {
-            "Authorization": f"Bearer {GRAPH_API_TOKEN}",
-            "Content-Type": "application/json"
-        },
-        timeout = 10
-    )
-    print("Graph resp →", resp.status_code, resp.text)
-    return jsonify({"status": "sent", "response": resp.json()}), 200
+    resp = _do_send_whatsapp(to, msg)
+    status = "sent" if resp.ok else "error"
+    return jsonify({"status": status, "response": resp.json()}), (200 if resp.ok else 500)
 
 
-# -----------------------------------------------------------------------------#
-# 3.  Zulip → WhatsApp hook                                                     #
-# -----------------------------------------------------------------------------#
+# --------------------------------------------------------------------------- #
+# 3. Zulip → WhatsApp                                                         #
+# --------------------------------------------------------------------------- #
 @app.post("/webhook/zulip")
 def receive_zulip():
     payload = request.get_json(force=True)
-    print("Incoming Zulip payload:", payload)
+    log.debug("Raw Zulip payload: %s", payload)
 
     message = payload.get("message", {})
     topic   = message.get("subject", "")
@@ -187,20 +204,21 @@ def receive_zulip():
 
     if topic.startswith("whatsapp:") and content:
         phone_number = topic.split("whatsapp:", 1)[1].strip()
-
         cleaned = (content
                    .replace("@**correspondence**", "")
                    .replace("@correspondence", "")
                    .strip())
 
-        print("Forwarding Zulip → WhatsApp:", phone_number, cleaned)
-        # Local call to /send so we keep one code path
-        return send_whatsapp.__wrapped__(to=phone_number, message=cleaned)  # type: ignore
+        log.info("⬇️  Zulip→Bridge  to=%s msg=%r", phone_number, cleaned)
+        resp = _do_send_whatsapp(phone_number, cleaned)
+        status = "sent" if resp.ok else "error"
+        return jsonify({"status": status, "response": resp.json()}), (200 if resp.ok else 500)
 
+    log.debug("Message ignored – not a WA relay")
     return jsonify({"status": "ignored"}), 200
 
 
-# -----------------------------------------------------------------------------#
+
 @app.get("/health")
 def health():
     return "OK", 200
