@@ -16,4 +16,6 @@ services:
         value: your-graph-api-token
       - key: WEBHOOK_VERIFY_TOKEN
         value: your-webhook-verify-token
+      - key: BUSINESS_PHONE_NUMBER_ID
+        value: your-business-phone-number-id
 
