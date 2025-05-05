@@ -85,7 +85,7 @@ ZULIP_STREAM  = "rt-integration-test-channel"
 
 # ─── helper: one place that actually calls the Graph API ──────────────────────
 def _do_send_whatsapp(to: str, msg: str):
-    log.info("⬆️  Bridge→WA  to=%s msg=%r", to, msg)
+    print("⬆️  Bridge→WA  to=%s msg=%r", to, msg)
 
     payload = {
         "messaging_product": "whatsapp",
@@ -102,7 +102,7 @@ def _do_send_whatsapp(to: str, msg: str):
         },
         timeout = 10
     )
-    log.info("WA API response status=%s body=%s", resp.status_code, resp.text)
+    print("WA API response status=%s body=%s", resp.status_code, resp.text)
     return resp
 
 
@@ -196,7 +196,7 @@ def send_whatsapp():
 @app.post("/webhook/zulip")
 def receive_zulip():
     payload = request.get_json(force=True)
-    log.debug("Raw Zulip payload: %s", payload)
+    print("Raw Zulip payload: %s", payload)
 
     message = payload.get("message", {})
     topic   = message.get("subject", "")
@@ -209,12 +209,12 @@ def receive_zulip():
                    .replace("@correspondence", "")
                    .strip())
 
-        log.info("⬇️  Zulip→Bridge  to=%s msg=%r", phone_number, cleaned)
+        print("⬇️  Zulip→Bridge  to=%s msg=%r", phone_number, cleaned)
         resp = _do_send_whatsapp(phone_number, cleaned)
         status = "sent" if resp.ok else "error"
         return jsonify({"status": status, "response": resp.json()}), (200 if resp.ok else 500)
 
-    log.debug("Message ignored – not a WA relay")
+    print("Message ignored – not a WA relay")
     return jsonify({"status": "ignored"}), 200
 
 
