@@ -181,7 +181,7 @@ ENGINEER_EMAIL_MAP = {
 }
 
 # fallback test account
-ENGINEER_EMAIL_MAP.setdefault("jamesk", "jamesk@filmlight.ltd.uk")
+#ENGINEER_EMAIL_MAP.setdefault("jamesk", "jamesk@filmlight.ltd.uk")
 
 # ─── Regex helpers ───────────────────────────────────────────────────────────
 INIT_RE  = re.compile(r"RT\s*#?(\d+)\s*\(([^)]+)\)", re.I)     # first WA text
