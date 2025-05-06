@@ -244,7 +244,7 @@ def _end_chat(phone: str, chat: dict):
     db.state["engineer_to_set"].get(eng, set()).discard(phone)
     db.save()
     _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
-    _send_zulip_dm(_recip_list(chat), f"🔚 Chat with **{phone}** closed.")
+    _send_zulip_dm(_recip_list(chat), f"✌️ Chat with **{phone}** closed.")
 
 # ─── 1. WhatsApp webhook ------------------------------------------------------
 @app.get("/webhook")
@@ -284,12 +284,13 @@ def receive_whatsapp():
 
         _send_zulip_dm(
             _recip_list(chat),
-            f"🆕 WhatsApp chat for *RT #{ticket_id}* (**{phone}**).\n"
+            f"WhatsApp chat for *RT #{ticket_id}* (**{phone}**).\n"
             "Send `!end` to close this chat."
         )
 
     # forward message
-    dm_body = f"📲 *RT #{chat['ticket']}* | **{phone}**:\n\n{text}"
+    # dm_body = f"📲 *RT #{chat['ticket']}* | **{phone}**:\n\n{text}"
+    dm_body = text
     _send_zulip_dm(_recip_list(chat), dm_body)
 
     # mark read
