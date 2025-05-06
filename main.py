@@ -165,7 +165,7 @@ GRAPH_API_TOKEN      = os.environ["GRAPH_API_TOKEN"]       # WhatsApp Cloud API
 WEBHOOK_VERIFY_TOKEN = os.environ["WEBHOOK_VERIFY_TOKEN"]  # Meta webhook verify
 ZULIP_API_KEY        = os.environ["ZULIP_API_KEY"]
 ZULIP_BOT_EMAIL      = os.environ["ZULIP_BOT_EMAIL"]       # outgoing‑webhook bot
-ZULIP_BOT_DM_EMAIL   = os.getenv("ZULIP_BOT_DM_EMAIL", ZULIP_BOT_EMAIL)
+ZULIP_BOT_DM_EMAIL   = os.getenv("ZULIP_BOT_DM_EMAIL", "rt-test-bot@chat-test.filmlight.ltd.uk")
 PORT                 = int(os.getenv("PORT", 5000))
 
 # ─── Zulip API endpoint ───────────────────────────────────────────────────────
