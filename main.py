@@ -172,7 +172,7 @@ PORT                  = int(os.getenv("PORT", 5000))
 
 ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 MAX_CHATS     = 2                       # slot0 and slot1 only
-
+CLOSED_REPLY = "Chat closed, please contact support to start a new chat."
 # ─── Engineer ↔ email map (env‑driven) ───────────────────────────────────────
 ENGINEER_EMAIL_MAP = {
     k[len("ENGINEER_EMAIL_"):].lower(): v
@@ -269,6 +269,7 @@ def receive_whatsapp():
     if not chat:
         m = INIT_RE.match(text)
         if not m:
+            _do_send_whatsapp(phone, CLOSED_REPLY)
             return "", 200          # wait for proper handshake
         ticket_id, eng_nick = m.groups()
         eng_email = ENGINEER_EMAIL_MAP.get(eng_nick.lower())
