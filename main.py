@@ -291,8 +291,11 @@ def _push_transcript(ticket_id: int):
 
     resp = requests.post(
         f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
-        headers={"Authorization": f"token {os.environ['RT_TOKEN']}"},
-        json={"Content": body}
+        headers={
+            "Authorization": f"token {os.environ['RT_TOKEN']}",
+            "Content-Type": "text/plain",     
+                 },
+        data = body.encode("utf-8)")
     )
     if resp.status_code != 200:
         print("⚠️  RT comment failed:", resp.status_code, resp.text)
