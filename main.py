@@ -281,13 +281,13 @@ def _push_transcript(ticket_id: int):
     if not lines:
         return
 
-    body = textwrap.dedent(f"""
-        Chat transcript imported by WA‑Zulip bridge.
-
-        {"-"*60}
-        {"\n".join(lines)}
-        {"-"*60}
-    """).strip()
+    lines_text = "\n".join(lines)
+    body = (
+        "Chat transcript imported by WA-Zulip bridge.\n\n"
+        + "-"*60 + "\n"
+        + lines_text + "\n"
+        + "-"*60
+    )
 
     resp = requests.post(
         f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
