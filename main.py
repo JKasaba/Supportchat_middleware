@@ -297,7 +297,7 @@ def _push_transcript(ticket_id: int):
                  },
         data = body.encode("utf-8)")
     )
-    if resp.status_code != 200 or resp.status_code != 201:
+    if resp.status_code != 201:
         print("⚠️  RT comment failed:", resp.status_code, resp.text)
         return
 
