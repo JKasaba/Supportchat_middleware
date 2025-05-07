@@ -372,7 +372,7 @@ def receive_whatsapp():
     dm_body = text
 
 
-    _log_line(chat["ticket"], f"WA {phone} → ENG: {text}")
+    _log_line(chat["ticket"], f"Customer to ENG: {text}")
 
     _send_zulip_dm(_recip_list(chat), dm_body)
 
@@ -414,7 +414,7 @@ def receive_zulip():
         _end_chat(phone, chat)
         return jsonify({"status":"ended"}), 200
     
-    _log_line(chat["ticket"], f"ENG → WA {phone}: {content}")
+    _log_line(chat["ticket"], f"ENG to Customer: {content}")
 
     resp = _do_send_whatsapp(phone, content)
     return jsonify({"status":"sent" if resp.ok else "error",
