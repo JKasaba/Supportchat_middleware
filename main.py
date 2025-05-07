@@ -291,7 +291,7 @@ def _push_transcript(ticket_id: int):
 
     resp = requests.post(
         f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
-        headers={"Authorization": f"token {os.environ["RT_TOKEN"]}"},
+        headers={"Authorization": f"token {os.environ['RT_TOKEN']}"},
         data={"content": body}
     )
     if resp.status_code != 200:
