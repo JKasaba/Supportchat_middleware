@@ -481,9 +481,9 @@ def receive_whatsapp():
         _send_zulip_dm(_recip_list(chat), dm_body)
 
 
-    _log_line(chat["ticket"], f"Customer to ENG: {text}")
+    # _log_line(chat["ticket"], f"Customer to ENG: {text}")
 
-    _send_zulip_dm(_recip_list(chat), dm_body)
+    # _send_zulip_dm(_recip_list(chat), dm_body)
 
     # mark read
     phone_id = body["entry"][0]["changes"][0]["value"]["metadata"]["phone_number_id"]
