@@ -1,5 +1,7 @@
+
 # from flask import Flask, request, jsonify
 # import os, re, requests, db, json, uuid
+# import textwrap
 
 # app = Flask(__name__)
 
@@ -27,6 +29,13 @@
 
 # # ─── Regex helpers ───────────────────────────────────────────────────────────
 # INIT_RE  = re.compile(r"RT\s*#?(\d+)\s*\(([^)]+)\)", re.I)     # first WA text
+
+
+
+# def _log_line(ticket_id: int, line: str):
+#     db.state["transcripts"].setdefault(str(ticket_id), []).append(line)
+
+
 
 # # ─── WhatsApp sender ---------------------------------------------------------
 # def _do_send_whatsapp(to: str, msg: str):
@@ -80,13 +89,55 @@
 #     db.save()
 #     return chat
 
+# def _push_transcript(ticket_id: int):
+#     lines = db.state["transcripts"].get(str(ticket_id), [])
+#     if not lines:
+#         return
+
+#     lines_text = "\n".join(lines)
+#     body = (
+#         "Chat transcript imported by WA-Zulip bridge.\n\n"
+#         + "-"*60 + "\n"
+#         + lines_text + "\n"
+#         + "-"*60
+#     )
+
+#     resp = requests.post(
+#         f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
+#         headers={
+#             "Authorization": f"token {os.environ['RT_TOKEN']}",
+#             "Content-Type": "text/plain",     
+#                  },
+#         data = body.encode("utf-8)")
+#     )
+#     if resp.status_code != 201:
+#         print("⚠️  RT comment failed:", resp.status_code, resp.text)
+#         return
+
+#     # on success, drop transcript
+#     db.state["transcripts"].pop(str(ticket_id), None)
+
+
 # def _end_chat(phone: str, chat: dict):
+#     ticket_id = chat["ticket"]
 #     eng = chat["engineer"]
+
+#     # tell customer + engineer
+#     _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
+#     _send_zulip_dm(_recip_list(chat), f"✌️ Chat with **{phone}** closed.")
+
+#     # post transcript to RT
+#     try:
+#         _push_transcript(ticket_id)
+#         print("Pushing Transcript to RT")
+#     except Exception as e:
+#         print("⚠️  Could not push transcript to RT:", e)
+
+#     # clean up state
 #     db.state["phone_to_chat"].pop(phone, None)
 #     db.state["engineer_to_set"].get(eng, set()).discard(phone)
 #     db.save()
-#     _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
-#     _send_zulip_dm(_recip_list(chat), f"✌️ Chat with **{phone}** closed.")
+
 
 # # ─── 1. WhatsApp webhook ------------------------------------------------------
 # @app.get("/webhook")
@@ -133,6 +184,10 @@
 #     # forward message
 #     # dm_body = f"📲 *RT #{chat['ticket']}* | **{phone}**:\n\n{text}"
 #     dm_body = text
+
+
+#     _log_line(chat["ticket"], f"Customer to ENG: {text}")
+
 #     _send_zulip_dm(_recip_list(chat), dm_body)
 
 #     # mark read
@@ -172,6 +227,8 @@
 #     if content.lower() == "!end":
 #         _end_chat(phone, chat)
 #         return jsonify({"status":"ended"}), 200
+    
+#     _log_line(chat["ticket"], f"ENG to Customer: {content}")
 
 #     resp = _do_send_whatsapp(phone, content)
 #     return jsonify({"status":"sent" if resp.ok else "error",
@@ -185,6 +242,8 @@
 # if __name__ == "__main__":
 #     print("Bridge starting on port", PORT)
 #     app.run(host="0.0.0.0", port=PORT, debug=False)
+
+
 
 from flask import Flask, request, jsonify
 import os, re, requests, db, json, uuid
@@ -339,11 +398,45 @@ def receive_whatsapp():
     body = request.get_json(force=True)
     msg  = (body.get("entry",[{}])[0].get("changes",[{}])[0]
                   .get("value",{}).get("messages",[{}])[0])
-    if not msg or msg.get("type") != "text":
+    # if not msg or msg.get("type") != "text":
+    #     return "", 200
+    
+    if not msg:
         return "", 200
 
+    msg_type = msg.get("type")
     phone = msg["from"]
-    text  = msg["text"]["body"].strip()
+
+    if msg_type == "text":
+        text = msg["text"]["body"].strip()
+    elif msg_type == "image":
+        media_id = msg["image"]["id"]
+        caption = msg["image"].get("caption", "")
+
+        # Step 1: Get media URL
+        media_resp = requests.get(
+            f"https://graph.facebook.com/v18.0/{media_id}",
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
+        )
+        media_url = media_resp.json().get("url")
+
+        # Step 2: Download image
+        image_resp = requests.get(
+            media_url,
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+            stream=True,
+            timeout=10
+        )
+
+        # Save to temp file
+        fname = f"/tmp/{uuid.uuid4()}.jpg"
+        with open(fname, "wb") as f:
+            for chunk in image_resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+    else:
+        return "", 200
+
 
     chat = db.state["phone_to_chat"].get(phone)
     if not chat:
@@ -369,8 +462,23 @@ def receive_whatsapp():
         )
 
     # forward message
-    # dm_body = f"📲 *RT #{chat['ticket']}* | **{phone}**:\n\n{text}"
-    dm_body = text
+    
+    if msg_type == "text":
+        dm_body = text
+        _log_line(chat["ticket"], f"Customer to ENG: {text}")
+        _send_zulip_dm(_recip_list(chat), dm_body)
+
+    elif msg_type == "image":
+        # Upload image to Zulip
+        zulip_upload = requests.post(
+            "https://chat-test.filmlight.ltd.uk/api/v1/user_uploads",
+            auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+            files={"file": open(fname, "rb")}
+        )
+        upload_uri = zulip_upload.json().get("uri", "")
+        dm_body = f"📷 Image from **{phone}**: {caption}\n[View Image]({upload_uri})"
+        _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
+        _send_zulip_dm(_recip_list(chat), dm_body)
 
 
     _log_line(chat["ticket"], f"Customer to ENG: {text}")
