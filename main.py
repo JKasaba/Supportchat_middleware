@@ -249,6 +249,8 @@ from flask import Flask, request, jsonify
 import os, re, requests, db, json, uuid
 import textwrap
 import re
+import mimetypes
+
 
 app = Flask(__name__)
 
@@ -545,11 +547,13 @@ def receive_zulip():
                 f.write(chunk)
 
         # Upload to WhatsApp
+        mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+
         with open(fname, "rb") as f:
             media_upload = requests.post(
                 "https://graph.facebook.com/v18.0/599049466632787/media",
                 headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
-                files={"file": f},
+                files={"file": (os.path.basename(fname), f, mime_type)},
                 data={"messaging_product": "whatsapp"}
             )
 
