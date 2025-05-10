@@ -498,6 +498,10 @@ def receive_whatsapp():
 def receive_zulip():
     payload = request.get_json(force=True)
     msg     = payload.get("message", {})
+
+    print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
+
+    
     if msg.get("type") != "private":
         return jsonify({"status":"ignored"}), 200
 
