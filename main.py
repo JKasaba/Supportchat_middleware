@@ -519,6 +519,60 @@ def receive_zulip():
     chat = db.state["phone_to_chat"][phone]
     content = msg["content"].strip()
 
+    # Check if Zulip message includes an uploaded file
+    upload = msg.get("attachments", [{}])[0] if msg.get("attachments") else None
+
+    if upload and "url" in upload and upload["url"].startswith("/user_uploads/"):
+        zulip_file_url = f"https://chat-test.filmlight.ltd.uk{upload['url']}"
+        file_name = upload.get("name", "file.jpg")
+
+        # Download the image
+        image_resp = requests.get(zulip_file_url, stream=True)
+        if not image_resp.ok:
+            return jsonify({"status": "zulip_download_failed"}), 500
+
+        # Save to temp file
+        fname = f"/tmp/{uuid.uuid4()}_{file_name}"
+        with open(fname, "wb") as f:
+            for chunk in image_resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Step 1: Upload to WhatsApp
+        media_upload = requests.post(
+            f"https://graph.facebook.com/v18.0/599049466632787/media",
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+            files={"file": open(fname, "rb")},
+            data={"messaging_product": "whatsapp"}
+        )
+
+        if not media_upload.ok:
+            return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
+
+        media_id = media_upload.json().get("id")
+
+        # Step 2: Send image message
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": phone.lstrip("+"),
+            "type": "image",
+            "image": {
+                "id": media_id,
+                "caption": content if content else file_name
+            }
+        }
+
+        resp = requests.post(
+            "https://graph.facebook.com/v18.0/599049466632787/messages",
+            json=payload,
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
+        )
+
+        os.remove(fname)  # clean up
+
+        _log_line(chat["ticket"], f"ENG sent image: {file_name} with caption: {content}")
+        return jsonify({"status": "sent" if resp.ok else "error", "response": resp.json()}), (200 if resp.ok else 500)
+
+
     if content.lower() == "!end":
         _end_chat(phone, chat)
         return jsonify({"status":"ended"}), 200
