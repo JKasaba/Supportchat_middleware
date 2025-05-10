@@ -248,6 +248,7 @@
 from flask import Flask, request, jsonify
 import os, re, requests, db, json, uuid
 import textwrap
+import re
 
 app = Flask(__name__)
 
@@ -501,7 +502,7 @@ def receive_zulip():
 
     print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
 
-    
+
     if msg.get("type") != "private":
         return jsonify({"status":"ignored"}), 200
 
@@ -524,11 +525,13 @@ def receive_zulip():
     content = msg["content"].strip()
 
     # Check if Zulip message includes an uploaded file
-    upload = msg.get("attachments", [{}])[0] if msg.get("attachments") else None
+    ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
 
-    if upload and "url" in upload and upload["url"].startswith("/user_uploads/"):
-        zulip_file_url = f"https://chat-test.filmlight.ltd.uk{upload['url']}"
-        file_name = upload.get("name", "file.jpg")
+    match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
+    if match:
+        relative_url = match.group(1)
+        zulip_file_url = f"https://chat-test.filmlight.ltd.uk{relative_url}"
+        file_name = os.path.basename(relative_url).split('?')[0]
 
         # Download the image
         image_resp = requests.get(zulip_file_url, stream=True)
@@ -541,7 +544,7 @@ def receive_zulip():
             for chunk in image_resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        # Step 1: Upload to WhatsApp
+        # Upload to WhatsApp
         with open(fname, "rb") as f:
             media_upload = requests.post(
                 "https://graph.facebook.com/v18.0/599049466632787/media",
@@ -550,19 +553,21 @@ def receive_zulip():
                 data={"messaging_product": "whatsapp"}
             )
 
+        os.remove(fname)
+
         if not media_upload.ok:
             return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
 
         media_id = media_upload.json().get("id")
 
-        # Step 2: Send image message
+        # Send image message
         payload = {
             "messaging_product": "whatsapp",
-            "to": phone.lstrip("+"),
+            "to": phone,
             "type": "image",
             "image": {
                 "id": media_id,
-                "caption": content if content else file_name
+                "caption": msg.get("content", "")  # optional
             }
         }
 
@@ -572,9 +577,7 @@ def receive_zulip():
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
 
-        os.remove(fname)  # clean up
-
-        _log_line(chat["ticket"], f"ENG sent image: {file_name} with caption: {content}")
+        _log_line(chat["ticket"], f"ENG sent image (markdown): {file_name}")
         return jsonify({"status": "sent" if resp.ok else "error", "response": resp.json()}), (200 if resp.ok else 500)
 
 
