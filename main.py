@@ -538,12 +538,13 @@ def receive_zulip():
                 f.write(chunk)
 
         # Step 1: Upload to WhatsApp
-        media_upload = requests.post(
-            f"https://graph.facebook.com/v18.0/599049466632787/media",
-            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
-            files={"file": open(fname, "rb")},
-            data={"messaging_product": "whatsapp"}
-        )
+        with open(fname, "rb") as f:
+            media_upload = requests.post(
+                "https://graph.facebook.com/v18.0/599049466632787/media",
+                headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+                files={"file": f},
+                data={"messaging_product": "whatsapp"}
+            )
 
         if not media_upload.ok:
             return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
