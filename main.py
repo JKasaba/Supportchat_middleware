@@ -536,7 +536,13 @@ def receive_zulip():
         file_name = os.path.basename(relative_url).split('?')[0]
 
         # Download the image
-        image_resp = requests.get(zulip_file_url, stream=True)
+        image_resp = requests.get(
+            zulip_file_url,
+            auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+            stream=True,
+            timeout=10
+        )
+
         if not image_resp.ok:
             return jsonify({"status": "zulip_download_failed"}), 500
 
