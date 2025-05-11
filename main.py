@@ -343,7 +343,7 @@ def _push_transcript(ticket_id: int):
     if not lines:
         return
 
-    lines_text = "\n".join(lines)
+    lines_text = "\n\n\n".join(lines)
     body = (
         "Chat transcript imported by WA-Zulip bridge.\n\n"
         + "-"*60 + "\n"
