@@ -547,7 +547,11 @@ def receive_zulip():
                 f.write(chunk)
 
         # Upload to WhatsApp
-        mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+        mime_type = mimetypes.guess_type(fname)[0] or "image/jpeg"
+        # mime_type = mimetypes.guess_type(fname)[0]
+        # if mime_type not in ("image/jpeg", "image/png", "image/webp"):
+        #     return jsonify({"status": "unsupported_mime", "mime": mime_type}), 400
+
 
         with open(fname, "rb") as f:
             media_upload = requests.post(
@@ -556,6 +560,8 @@ def receive_zulip():
                 files={"file": (os.path.basename(fname), f, mime_type)},
                 data={"messaging_product": "whatsapp"}
             )
+
+
 
         os.remove(fname)
 
