@@ -302,12 +302,6 @@ def receive_zulip():#
 
     print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
 
-    # AUTO_UPLOAD_RE = re.compile(r"^\[.*?\]\(/user_uploads/.*?\)$")
-    # content = msg.get("content", "").strip()
-    # if AUTO_UPLOAD_RE.fullmatch(content):
-    #     return jsonify({"status": "ignored_auto_upload"}), 200
-
-
     if msg.get("type") != "private":
         return jsonify({"status":"ignored"}), 200
 
@@ -376,6 +370,23 @@ def receive_zulip():#
                 data={"messaging_product": "whatsapp", "type": mime_type}
             )
 
+        if not media_upload.ok and "Param file must be a file with one of the following types" in media_upload.text:
+            print(f"Unsupported MIME type '{mime_type}', retrying as text/plain")
+            mime_type = "text/plain"
+            if not fname.endswith(".txt"):
+                new_fname = fname + ".txt"
+                os.rename(fname, new_fname)
+                fname = new_fname
+                file_name = os.path.basename(fname)
+
+            with open(fname, "rb") as f:
+                media_upload = requests.post(
+                    "https://graph.facebook.com/v18.0/599049466632787/media",
+                    headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+                    files={"file": (file_name, f, mime_type)},
+                    data={"messaging_product": "whatsapp", "type": mime_type}
+                )
+
         os.remove(fname)
 
         if not media_upload.ok:
@@ -416,27 +427,7 @@ def receive_zulip():#
         _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
 
         return jsonify({"status":"sent image/document"}), 200   
-        # # Send image message
-        # payload = {
-        #     "messaging_product": "whatsapp",
-        #     "to": phone,
-        #     "type": "image",
-        #     "image": {
-        #         "id": media_id,
-        #         "caption": msg.get("content", "")  # optional
-        #     }
-        # }
-
-        # resp = requests.post(
-        #     "https://graph.facebook.com/v18.0/599049466632787/messages",
-        #     json=payload,
-        #     headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
-        # )
-
-        # _log_line(chat["ticket"], f"ENG sent image (markdown): {file_name}")
-        # return jsonify({"status": "sent" if resp.ok else "error", "response": resp.json()}), (200 if resp.ok else 500)
-
-
+    
     if content.lower() == "!end":
         _end_chat(phone, chat)
         return jsonify({"status":"ended"}), 200
