@@ -392,7 +392,7 @@ def receive_zulip():#
                 "type": "image",
                 "image": {
                     "id": media_id,
-                    #"caption": msg.get("content", "")
+                    "caption": msg.get("content", "")
                 }
             }
         else:
@@ -402,7 +402,7 @@ def receive_zulip():#
                 "type": "document",
                 "document": {
                     "id": media_id,
-                    #"caption": msg.get("content", ""),
+                    "caption": msg.get("content", ""),
                     "filename": file_name
                 }
             }
@@ -413,7 +413,9 @@ def receive_zulip():#
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
 
-        _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")        
+        _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
+
+        return "Sent Image/Document", 200     
         # # Send image message
         # payload = {
         #     "messaging_product": "whatsapp",
