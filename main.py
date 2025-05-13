@@ -267,7 +267,7 @@ def receive_whatsapp():
             files={"file": open(fname, "rb")}
         )
         upload_uri = zulip_upload.json().get("uri", "")
-        dm_body = f"[Download Image]({upload_uri} \n {caption})"
+        dm_body = f"[Download Image]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
         _send_zulip_dm(_recip_list(chat), dm_body)
 
@@ -278,7 +278,7 @@ def receive_whatsapp():
             files={"file": open(fname, "rb")}
         )
         upload_uri = zulip_upload.json().get("uri", "")
-        dm_body = f"[{filename}]({upload_uri} \n {caption})"
+        dm_body = f"[{filename}]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
         _send_zulip_dm(_recip_list(chat), dm_body)
 
