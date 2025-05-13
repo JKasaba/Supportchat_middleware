@@ -332,9 +332,6 @@ def receive_zulip():#
     # Check if Zulip message includes an uploaded file
     ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
 
-    if ZULIP_UPLOAD_RE.fullmatch(content):
-        return jsonify({"status": "ignored_auto_upload"}), 200
-
     match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
     if match:
         relative_url = match.group(1)
