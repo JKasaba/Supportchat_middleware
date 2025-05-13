@@ -220,16 +220,6 @@ def receive_whatsapp():
             for chunk in doc_resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        # Step 3: Upload to Zulip
-        zulip_upload = requests.post(
-            "https://chat-test.filmlight.ltd.uk/api/v1/user_uploads",
-            auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
-            files={"file": open(fname, "rb")}
-        )
-        upload_uri = zulip_upload.json().get("uri", "")
-        dm_body = f"[{filename}]({upload_uri})"
-        _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
-        _send_zulip_dm(_recip_list(chat), dm_body)
 
         #
         #
@@ -281,6 +271,16 @@ def receive_whatsapp():
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
         _send_zulip_dm(_recip_list(chat), dm_body)
 
+    elif msg_type == "document":
+        zulip_upload = requests.post(
+            "https://chat-test.filmlight.ltd.uk/api/v1/user_uploads",
+            auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+            files={"file": open(fname, "rb")}
+        )
+        upload_uri = zulip_upload.json().get("uri", "")
+        dm_body = f"[{filename}]({upload_uri})"
+        _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
+        _send_zulip_dm(_recip_list(chat), dm_body)
 
     # _log_line(chat["ticket"], f"Customer to ENG: {text}")
 
