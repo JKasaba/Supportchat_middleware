@@ -415,7 +415,7 @@ def receive_zulip():#
 
         _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
 
-        return "Sent Image/Document", 200     
+        return jsonify({"status":"sent image/document"}), 200   
         # # Send image message
         # payload = {
         #     "messaging_product": "whatsapp",
