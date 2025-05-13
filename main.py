@@ -386,7 +386,7 @@ def receive_zulip():#
                 "type": "image",
                 "image": {
                     "id": media_id,
-                    "caption": msg.get("content", "")
+                    #"caption": msg.get("content", "")
                 }
             }
         else:
