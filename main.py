@@ -190,6 +190,51 @@ def receive_whatsapp():
             for chunk in image_resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
+    #
+    #
+    #
+
+    elif msg_type == "document":
+        media_id = msg["document"]["id"]
+        filename = msg["document"]["filename"]
+        caption = msg["document"].get("caption", "")
+
+        # Step 1: Get media URL
+        media_resp = requests.get(
+            f"https://graph.facebook.com/v18.0/{media_id}",
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
+        )
+        media_url = media_resp.json().get("url")
+
+        # Step 2: Download document
+        doc_resp = requests.get(
+            media_url,
+            headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+            stream=True,
+            timeout=10
+        )
+
+        # Save to temp file
+        fname = f"/tmp/{uuid.uuid4()}_{filename}"
+        with open(fname, "wb") as f:
+            for chunk in doc_resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Step 3: Upload to Zulip
+        zulip_upload = requests.post(
+            "https://chat-test.filmlight.ltd.uk/api/v1/user_uploads",
+            auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+            files={"file": open(fname, "rb")}
+        )
+        upload_uri = zulip_upload.json().get("uri", "")
+        dm_body = f"[{filename}]({upload_uri})"
+        _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
+        _send_zulip_dm(_recip_list(chat), dm_body)
+
+        #
+        #
+        #
+
     else:
         return "", 200
 
@@ -251,7 +296,7 @@ def receive_whatsapp():
 
 # ─── 2. Zulip webhook ---------------------------------------------------------
 @app.post("/webhook/zulip")
-def receive_zulip():
+def receive_zulip():#
     payload = request.get_json(force=True)
     msg     = payload.get("message", {})
 
@@ -306,7 +351,7 @@ def receive_zulip():
                 f.write(chunk)
 
         # Upload to WhatsApp
-        mime_type = mimetypes.guess_type(fname)[0] or "image/jpeg"
+        mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
         # mime_type = mimetypes.guess_type(fname)[0]
         # if mime_type not in ("image/jpeg", "image/png", "image/webp"):
         #     return jsonify({"status": "unsupported_mime", "mime": mime_type}), 400
@@ -317,37 +362,66 @@ def receive_zulip():
                 "https://graph.facebook.com/v18.0/599049466632787/media",
                 headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
                 files={"file": (os.path.basename(fname), f, mime_type)},
-                data={"messaging_product": "whatsapp"}
+                data={"messaging_product": "whatsapp", "type": mime_type}
             )
-
-
 
         os.remove(fname)
 
         if not media_upload.ok:
             return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
+        
+
 
         media_id = media_upload.json().get("id")
 
-        # Send image message
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": phone,
-            "type": "image",
-            "image": {
-                "id": media_id,
-                "caption": msg.get("content", "")  # optional
+        if mime_type.startswith("image/"):
+            wa_payload = {
+                "messaging_product": "whatsapp",
+                "to": phone,
+                "type": "image",
+                "image": {
+                    "id": media_id,
+                    "caption": msg.get("content", "")
+                }
             }
-        }
+        else:
+            wa_payload = {
+                "messaging_product": "whatsapp",
+                "to": phone,
+                "type": "document",
+                "document": {
+                    "id": media_id,
+                    "caption": msg.get("content", ""),
+                    "filename": file_name
+                }
+            }
 
         resp = requests.post(
             "https://graph.facebook.com/v18.0/599049466632787/messages",
-            json=payload,
+            json=wa_payload,
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
 
-        _log_line(chat["ticket"], f"ENG sent image (markdown): {file_name}")
-        return jsonify({"status": "sent" if resp.ok else "error", "response": resp.json()}), (200 if resp.ok else 500)
+        _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")        
+        # # Send image message
+        # payload = {
+        #     "messaging_product": "whatsapp",
+        #     "to": phone,
+        #     "type": "image",
+        #     "image": {
+        #         "id": media_id,
+        #         "caption": msg.get("content", "")  # optional
+        #     }
+        # }
+
+        # resp = requests.post(
+        #     "https://graph.facebook.com/v18.0/599049466632787/messages",
+        #     json=payload,
+        #     headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
+        # )
+
+        # _log_line(chat["ticket"], f"ENG sent image (markdown): {file_name}")
+        # return jsonify({"status": "sent" if resp.ok else "error", "response": resp.json()}), (200 if resp.ok else 500)
 
 
     if content.lower() == "!end":
