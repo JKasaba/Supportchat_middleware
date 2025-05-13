@@ -231,7 +231,7 @@ def receive_whatsapp():
 
     chat = db.state["phone_to_chat"].get(phone)
     if not chat:
-        m = INIT_RE.match(text)
+        m = INIT_RE.search(text)
         if not m:
             _do_send_whatsapp(phone, CLOSED_REPLY)
             return "", 200          # wait for proper handshake
@@ -351,16 +351,6 @@ def receive_zulip():#
 
         # Upload to WhatsApp
         mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
-        # mime_type = mimetypes.guess_type(fname)[0]
-        # if mime_type not in ("image/jpeg", "image/png", "image/webp"):
-        #     return jsonify({"status": "unsupported_mime", "mime": mime_type}), 400
-        if mime_type == "application/octet-stream":
-            mime_type = "text/plain"
-            # Rename the file extension so WhatsApp treats it as .txt
-            new_fname = fname + ".txt"
-            os.rename(fname, new_fname)
-            fname = new_fname
-            file_name = os.path.basename(fname)
 
         with open(fname, "rb") as f:
             media_upload = requests.post(
