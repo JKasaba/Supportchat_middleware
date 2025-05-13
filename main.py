@@ -302,6 +302,11 @@ def receive_zulip():#
 
     print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
 
+    AUTO_UPLOAD_RE = re.compile(r"^\[.*?\]\(/user_uploads/.*?\)$")
+    content = msg.get("content", "").strip()
+    if AUTO_UPLOAD_RE.fullmatch(content):
+        return jsonify({"status": "ignored_auto_upload"}), 200
+
 
     if msg.get("type") != "private":
         return jsonify({"status":"ignored"}), 200
@@ -324,10 +329,6 @@ def receive_zulip():#
     chat = db.state["phone_to_chat"][phone]
     content = msg["content"].strip()
 
-    AUTO_UPLOAD_RE = re.compile(r"^\[.*?\]\(/user_uploads/.*?\)$")
-    
-    if AUTO_UPLOAD_RE.fullmatch(content):
-        return jsonify({"status": "ignored_auto_upload"}), 200
     # Check if Zulip message includes an uploaded file
     ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
 
