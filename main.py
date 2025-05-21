@@ -7,7 +7,7 @@ import mimetypes
 
 app = Flask(__name__)
 
-# ─── Required bot / admin env vars ────────────────────────────────────────────
+# env vars
 ZULIP_BOT_EMAIL       = os.environ["ZULIP_BOT_EMAIL"]          # support‑chat
 ZULIP_API_KEY         = os.environ["ZULIP_API_KEY"]
 ZULIP_BOT_DM_EMAIL    = os.environ["ZULIP_BOT_DM_EMAIL"]       # correspondence
@@ -19,17 +19,14 @@ PORT                  = int(os.getenv("PORT", 5000))
 ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 MAX_CHATS     = 2                       # slot0 and slot1 only
 CLOSED_REPLY = "Chat closed, please contact support to start a new chat."
-# ─── Engineer ↔ email map (env‑driven) ───────────────────────────────────────
+# eng to email map
 ENGINEER_EMAIL_MAP = {
     k[len("ENGINEER_EMAIL_"):].lower(): v
     for k, v in os.environ.items()
     if k.startswith("ENGINEER_EMAIL_")
 }
 
-# fallback test account
-#ENGINEER_EMAIL_MAP.setdefault("jamesk", "jamesk@filmlight.ltd.uk")
-
-# ─── Regex helpers ───────────────────────────────────────────────────────────
+# regex helper
 INIT_RE  = re.compile(r"RT\s*#?(\d+)\s*\(([^)]+)\)", re.I)     # first WA text
 
 
@@ -39,7 +36,7 @@ def _log_line(ticket_id: int, line: str):
 
 
 
-# ─── WhatsApp sender ---------------------------------------------------------
+# Whatapp sender
 def _do_send_whatsapp(to: str, msg: str):
     payload = {
         "messaging_product": "whatsapp",
@@ -54,7 +51,7 @@ def _do_send_whatsapp(to: str, msg: str):
         timeout=10
     )
 
-# ─── Zulip DM sender ---------------------------------------------------------
+# Zulip sender
 def _send_zulip_dm(recipients: list[str], content: str):
     to_field = ",".join(recipients)           # "user1@example.com,user2@…"
     return requests.post(
@@ -64,14 +61,14 @@ def _send_zulip_dm(recipients: list[str], content: str):
         timeout=10
     )
 
-# ─── recipient helpers -------------------------------------------------------
+# Zulip recipient list
 def _recip_list(chat: dict) -> list[str]:
     base = [chat["engineer"], ZULIP_BOT_DM_EMAIL]
     if chat["slot"] == 1:
         base.append(ZULIP_EXTRA_BOT_EMAIL)
     return base
 
-# ─── chat registration -------------------------------------------------------
+# chat registration
 def _register_chat(phone: str, ticket_id: int, eng_email: str):
     active = db.state["engineer_to_set"].get(eng_email, set())
 
@@ -113,7 +110,7 @@ def _push_transcript(ticket_id: int):
         data = body.encode("utf-8)")
     )
     if resp.status_code != 201:
-        print("⚠️  RT comment failed:", resp.status_code, resp.text)
+        print("RT comment failed:", resp.status_code, resp.text)
         return
 
     # on success, drop transcript
@@ -133,7 +130,7 @@ def _end_chat(phone: str, chat: dict):
         _push_transcript(ticket_id)
         print("Pushing Transcript to RT")
     except Exception as e:
-        print("⚠️  Could not push transcript to RT:", e)
+        print("Could not push transcript to RT:", e)
 
     # clean up state
     db.state["phone_to_chat"].pop(phone, None)
@@ -141,7 +138,7 @@ def _end_chat(phone: str, chat: dict):
     db.save()
 
 
-# ─── 1. WhatsApp webhook ------------------------------------------------------
+# WhatsApp webhook
 @app.get("/webhook")
 def verify_webhook():
     if (request.args.get("hub.mode") == "subscribe"
@@ -154,8 +151,6 @@ def receive_whatsapp():
     body = request.get_json(force=True)
     msg  = (body.get("entry",[{}])[0].get("changes",[{}])[0]
                   .get("value",{}).get("messages",[{}])[0])
-    # if not msg or msg.get("type") != "text":
-    #     return "", 200
     
     if not msg:
         return "", 200
@@ -169,14 +164,14 @@ def receive_whatsapp():
         media_id = msg["image"]["id"]
         caption = msg["image"].get("caption", "")
 
-        # Step 1: Get media URL
+        # Get media URL
         media_resp = requests.get(
             f"https://graph.facebook.com/v18.0/{media_id}",
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
         media_url = media_resp.json().get("url")
 
-        # Step 2: Download image
+        # Download image
         image_resp = requests.get(
             media_url,
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
@@ -190,23 +185,19 @@ def receive_whatsapp():
             for chunk in image_resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-    #
-    #
-    #
-
     elif msg_type == "document":
         media_id = msg["document"]["id"]
         filename = msg["document"]["filename"]
         caption = msg["document"].get("caption", "")
 
-        # Step 1: Get media URL
+        # Get media URL
         media_resp = requests.get(
             f"https://graph.facebook.com/v18.0/{media_id}",
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
         media_url = media_resp.json().get("url")
 
-        # Step 2: Download document
+        # Download document
         doc_resp = requests.get(
             media_url,
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
@@ -219,11 +210,6 @@ def receive_whatsapp():
         with open(fname, "wb") as f:
             for chunk in doc_resp.iter_content(chunk_size=8192):
                 f.write(chunk)
-
-
-        #
-        #
-        #
 
     else:
         return "", 200
@@ -282,9 +268,6 @@ def receive_whatsapp():
         _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
         _send_zulip_dm(_recip_list(chat), dm_body)
 
-    # _log_line(chat["ticket"], f"Customer to ENG: {text}")
-
-    # _send_zulip_dm(_recip_list(chat), dm_body)
 
     # mark read
     phone_id = body["entry"][0]["changes"][0]["value"]["metadata"]["phone_number_id"]
@@ -294,7 +277,7 @@ def receive_whatsapp():
                         "status":"read", "message_id": msg["id"]})
     return "", 200
 
-# ─── 2. Zulip webhook ---------------------------------------------------------
+# Zulip webhook
 @app.post("/webhook/zulip")
 def receive_zulip():#
     payload = request.get_json(force=True)
@@ -428,11 +411,11 @@ def receive_zulip():#
     return jsonify({"status":"sent" if resp.ok else "error",
                     "response":resp.json()}), (200 if resp.ok else 500)
 
-# ─── Health -------------------------------------------------------------------
+# Health check
 @app.get("/health")
 def health(): return "OK", 200
 
-# ─── main ---------------------------------------------------------------------
+# main
 if __name__ == "__main__":
     print("Bridge starting on port", PORT)
     app.run(host="0.0.0.0", port=PORT, debug=False)
