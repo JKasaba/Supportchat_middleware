@@ -158,54 +158,6 @@ def receive_whatsapp():
     msg_type = msg.get("type")
     phone = msg["from"]
 
-    db.state.setdefault("pending_rts", {})
-    pending = db.state["pending_rts"]
-
-    chat = db.state["phone_to_chat"].get(phone)
-
-    if not chat and msg_type == "text":
-        text = msg["text"]["body"].strip()
-        state = pending.get(phone)
-
-        if state is None:
-            _do_send_whatsapp(phone,
-                "Hi! It looks like you're not currently in a chat.\n"
-                "Would you like to open a new support ticket? If so, please reply with the *subject line* of your issue."
-            )
-            pending[phone] = {"stage": "ask_subject"}
-            db.save()
-            return "", 200
-
-        elif state["stage"] == "ask_subject":
-            pending[phone]["subject"] = text
-            pending[phone]["stage"] = "ask_description"
-            _do_send_whatsapp(phone, "Thanks! Now, please describe your issue.")
-            db.save()
-            return "", 200
-
-        elif state["stage"] == "ask_description":
-            subject = pending[phone]["subject"]
-            description = text
-            print("\n--- RT Creation Request ---")
-            print("Phone:", phone)
-            print("Subject:", subject)
-            print("Description:", description)
-            print("---------------------------\n")
-            _do_send_whatsapp(phone,
-                "Thanks! We've received your request. A support agent will be with you shortly."
-            )
-            pending.pop(phone, None)
-            db.save()
-            return "", 200
-
-        # fallback
-        return "", 200
-
-    # === Skip RT prompt for media-only messages ===
-    if not chat and msg_type in ("image", "document"):
-        _do_send_whatsapp(phone, CLOSED_REPLY)
-        return "", 200
-
     if msg_type == "text":
         text = msg["text"]["body"].strip()
     elif msg_type == "image":
