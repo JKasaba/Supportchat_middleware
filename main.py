@@ -191,8 +191,23 @@ def receive_whatsapp():
             print("Subject:", subject)
             print("Description:", description)
             print("---------------------------\n")
+
+            requests.post(
+                ZULIP_API_URL,
+                data={
+                    "type": "stream",
+                    "to": "SupportChat-test",
+                    "topic": f"{phone} | {subject}",
+                    "content": (
+                        f"New WhatsApp support request\n\n"
+                        f"Description: {description}"
+                    ),
+                },
+                auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+                timeout=10
+            )
             _do_send_whatsapp(phone,
-                "Thanks! We've received your request. A support agent will be with you shortly."
+                "Thanks! We've received your request. An engineer will respond once available"
             )
             pending.pop(phone, None)
             db.save()
