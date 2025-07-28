@@ -199,7 +199,7 @@ def receive_whatsapp():
                     "to": "SupportChat-test",
                     "topic": f"{phone} | {subject}",
                     "content": (
-                        f"New WhatsApp support request\n\n"
+                        f"New WhatsApp support request:\n\n"
                         f"Description: {description}"
                     ),
                 },
@@ -207,7 +207,7 @@ def receive_whatsapp():
                 timeout=10
             )
             _do_send_whatsapp(phone,
-                "Thanks! We've received your request. An engineer will respond once available"
+                "Thanks! We've received your request. An engineer will respond once available."
             )
             pending.pop(phone, None)
             db.save()
@@ -348,12 +348,42 @@ def receive_zulip():#
 
     print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
 
-    if msg.get("type") != "private":
-        return jsonify({"status":"ignored"}), 200
-
     sender  = msg.get("sender_email")
     if sender == ZULIP_BOT_EMAIL:
         return jsonify({"status":"ignored_bot"}), 200
+    
+    if msg.get("type") == "stream" and msg.get("trigger") == "mention":
+        topic = msg.get("topic") or msg.get("subject")       # Zulip ≥3.0 uses 'topic'
+        phone = topic.split("|", 1)[0].strip()               # "12015551234 | Subject"
+        chat  = db.state["phone_to_chat"].get(phone)
+
+        if not chat:                                         # no active WA chat?
+            return jsonify({"status": "no_chat"}), 200
+
+        # drop the leading "@whatsapp-bot" so the customer never sees it
+        content = re.sub(r'^@\*\*.*?\*\*\s*', '', msg["content"]).strip()
+
+        # ---------- attachment block ----------
+        ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
+        if ZULIP_UPLOAD_RE.search(content):
+            # reuse your existing attachment‑upload code here
+            ...                                              
+            return jsonify({"status": "sent_file"}), 200
+        # ---------------------------------------
+
+        if not content:
+            return jsonify({"status": "empty"}), 200
+
+        _log_line(chat["ticket"], f"ENG to Customer: {content}")
+        _do_send_whatsapp(phone, content)
+        return jsonify({"status": "sent_text"}), 200
+
+
+
+    
+    if msg.get("type") != "private":
+        return jsonify({"status":"ignored"}), 200
+
 
     phones = db.state["engineer_to_set"].get(sender, set())
     if not phones:
