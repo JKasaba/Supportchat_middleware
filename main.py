@@ -345,14 +345,16 @@ def receive_whatsapp():
 def receive_zulip():#
     payload = request.get_json(force=True)
     msg     = payload.get("message", {})
+    trigger  = payload.get("trigger")
+    sender  = msg.get("sender_email")
 
     print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
 
-    sender  = msg.get("sender_email")
+    
     if sender == ZULIP_BOT_EMAIL:
         return jsonify({"status":"ignored_bot"}), 200
     
-    if msg.get("type") == "stream" and msg.get("trigger") == "mention":
+    if msg.get("type") == "stream" and trigger == "mention":
         topic = msg.get("topic") or msg.get("subject")       # Zulip ≥3.0 uses 'topic'
         phone = topic.split("|", 1)[0].strip()               # "12015551234 | Subject"
         chat  = db.state["phone_to_chat"].get(phone)
