@@ -355,6 +355,7 @@ def receive_zulip():#
         return jsonify({"status":"ignored_bot"}), 200
     
     if msg.get("type") == "stream":
+        print("Stream is being triggered")
         topic = msg.get("topic") or msg.get("subject")       # Zulip ≥3.0 uses 'topic'
         phone = topic.split("|", 1)[0].strip()               # "12015551234 | Subject"
         chat  = db.state["phone_to_chat"].get(phone)
@@ -377,8 +378,10 @@ def receive_zulip():#
             return jsonify({"status": "empty"}), 200
 
         _log_line(chat["ticket"], f"ENG to Customer: {content}")
-        _do_send_whatsapp(phone, content)
-        return jsonify({"status": "sent_text"}), 200
+        print(f"Phone = {phone} Content = {content}")
+        resp = _do_send_whatsapp(phone, content)
+        return jsonify({"status":"sent" if resp.ok else "error", 
+                    "response":resp.json()}), (200 if resp.ok else 500)
 
 
 
