@@ -45,7 +45,7 @@ def _do_send_whatsapp(to: str, msg: str):
         "text": {"body": msg}
     }
     return requests.post(
-        "https://graph.facebook.com/v18.0/599049466632787/messages",
+        "https://graph.facebook.com/v18.0/777113995477023/messages",
         json=payload,
         headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
         timeout=10
@@ -381,7 +381,7 @@ def receive_zulip():#
         print(f"Phone = {phone} Content = {content}")
         resp = _do_send_whatsapp(phone, content)
         return jsonify({"status":"sent" if resp.ok else "error", 
-                    "response":resp.json()}), (200 if resp.ok else 500)
+                        "response":resp.json()}), (200 if resp.ok else 500)
 
 
 
