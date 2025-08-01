@@ -45,7 +45,7 @@ def _do_send_whatsapp(to: str, msg: str):
         "text": {"body": msg}
     }
     return requests.post(
-        "https://graph.facebook.com/v18.0/777113995477023/messages",
+        "https://graph.facebook.com/v22.0/777113995477023/messages",
         json=payload,
         headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
         timeout=10
@@ -229,7 +229,7 @@ def receive_whatsapp():
 
         # Get media URL
         media_resp = requests.get(
-            f"https://graph.facebook.com/v18.0/{media_id}",
+            f"https://graph.facebook.com/v22.0/{media_id}",
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
         media_url = media_resp.json().get("url")
@@ -255,7 +255,7 @@ def receive_whatsapp():
 
         # Get media URL
         media_resp = requests.get(
-            f"https://graph.facebook.com/v18.0/{media_id}",
+            f"https://graph.facebook.com/v22.0/{media_id}",
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
         media_url = media_resp.json().get("url")
@@ -334,7 +334,7 @@ def receive_whatsapp():
 
     # mark read
     phone_id = body["entry"][0]["changes"][0]["value"]["metadata"]["phone_number_id"]
-    requests.post(f"https://graph.facebook.com/v18.0/{phone_id}/messages",
+    requests.post(f"https://graph.facebook.com/v22.0/{phone_id}/messages",
                   headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
                   json={"messaging_product":"whatsapp",
                         "status":"read", "message_id": msg["id"]})
@@ -435,7 +435,7 @@ def receive_zulip():#
 
         with open(fname, "rb") as f:
             media_upload = requests.post(
-                "https://graph.facebook.com/v18.0/777113995477023/media",
+                "https://graph.facebook.com/v22.0/777113995477023/media",
                 headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
                 files={"file": (os.path.basename(fname), f, mime_type)},
                 data={"messaging_product": "whatsapp", "type": mime_type}
@@ -452,7 +452,7 @@ def receive_zulip():#
 
             with open(fname, "rb") as f:
                 media_upload = requests.post(
-                    "https://graph.facebook.com/v18.0/777113995477023/media",
+                    "https://graph.facebook.com/v22.0/777113995477023/media",
                     headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
                     files={"file": (file_name, f, mime_type)},
                     data={"messaging_product": "whatsapp", "type": mime_type}
@@ -490,7 +490,7 @@ def receive_zulip():#
             }
 
         resp = requests.post(
-            "https://graph.facebook.com/v18.0/777113995477023/messages",
+            "https://graph.facebook.com/v22.0/777113995477023/messages",
             json=wa_payload,
             headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
         )
