@@ -44,12 +44,15 @@ def _do_send_whatsapp(to: str, msg: str):
         "type": "text",
         "text": {"body": msg}
     }
-    return requests.post(
+    resp = requests.post(
         "https://graph.facebook.com/v22.0/777113995477023/messages",
         json=payload,
         headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
         timeout=10
     )
+    if not resp.ok:
+        print("WhatsApp send failed:", resp.status_code, resp.text)
+    return resp
 
 # Zulip sender
 def _send_zulip_dm(recipients: list[str], content: str):
