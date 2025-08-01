@@ -360,7 +360,9 @@ def receive_zulip():#
     if msg.get("type") == "stream":
         print("Stream is being triggered")
         topic = msg.get("topic") or msg.get("subject")       # Zulip ≥3.0 uses 'topic'
-        phone = topic.split("|", 1)[0].strip()               # "12015551234 | Subject"
+        print(f"topic: {topic}")
+        phone = topic.split("|", 1)[0].strip()    
+        print(f"phone: {phone}")           # "12015551234 | Subject"
         chat  = db.state["phone_to_chat"].get(phone)
 
         if not chat:                                         # no active WA chat?
