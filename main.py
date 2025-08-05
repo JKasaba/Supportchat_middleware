@@ -34,7 +34,31 @@ INIT_RE  = re.compile(r"RT\s*#?(\d+)\s*\(([^)]+)\)", re.I)     # first WA text
 def _log_line(ticket_id: int, line: str):
     db.state["transcripts"].setdefault(str(ticket_id), []).append(line)
 
+#create RT Ticket
 
+def _create_rt_ticket(subject: str, requestor: str, description: str) -> int | None:
+    """
+    Create a new RT ticket and return its ticket ID, or None on failure.
+    """
+    rt_url = f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket"
+    headers = {
+        "Authorization": f"token {os.environ['RT_TOKEN']}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "Subject": subject,
+        "Queue": "Test",
+        "Requestor": requestor,
+        "Text": description
+    }
+    resp = requests.post(rt_url, headers=headers, json=data)
+    if resp.status_code == 201:
+        ticket_id = resp.json().get("id")
+        print(f"Created RT ticket {ticket_id}")
+        return ticket_id
+    else:
+        print("RT ticket creation failed:", resp.status_code, resp.text)
+        return None
 
 # Whatapp sender
 def _do_send_whatsapp(to: str, msg: str):
@@ -93,6 +117,10 @@ def _register_chat(phone: str, ticket_id: int, eng_email: str, topic: str):
     if len(active) >= MAX_CHATS:
         _do_send_whatsapp(phone, "All agents busy, please try again later.")
         raise RuntimeError("engineer_busy")
+    
+    # Logic for empty ticket field -- this was a ticket started on whatsapp
+    if ticket_id == None:
+        ticket_id = _create_rt_ticket(topic, "Whatsapp Bridge", "New Ticket from Whatsapp")
 
     slot = 0 if not active else 1            # slot0 first, slot1 second
     chat = {
@@ -241,7 +269,7 @@ def receive_whatsapp():
             pending.pop(phone, None)
 
             try:
-                chat = _register_chat(phone, 123, None, f"{phone} | {subject}")
+                chat = _register_chat(phone, None, None, f"{phone} | {subject}")
             except RuntimeError:
                 return "Register new chat failed -- stream", 200
             
