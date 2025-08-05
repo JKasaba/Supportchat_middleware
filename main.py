@@ -419,10 +419,96 @@ def receive_zulip():#
 
         # ---------- attachment block ----------
         ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
-        if ZULIP_UPLOAD_RE.search(content):
-            # reuse your existing attachment‑upload code here
-            ...                                              
-            return jsonify({"status": "sent_file"}), 200
+        match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
+        if match:
+            zulip_file_url = f"https://chat-test.filmlight.ltd.uk{relative_url}"
+            file_name = os.path.basename(relative_url).split('?')[0]
+
+            # Download the image
+            image_resp = requests.get(
+                zulip_file_url,
+                auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+                stream=True,
+                timeout=10
+            )
+
+            if not image_resp.ok:
+                return jsonify({"status": "zulip_download_failed"}), 500
+
+            # Save to temp file
+            fname = f"/tmp/{uuid.uuid4()}_{file_name}"
+            with open(fname, "wb") as f:
+                for chunk in image_resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+            # Upload to WhatsApp
+            mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+
+            with open(fname, "rb") as f:
+                media_upload = requests.post(
+                    "https://graph.facebook.com/v22.0/777113995477023/media",
+                    headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+                    files={"file": (os.path.basename(fname), f, mime_type)},
+                    data={"messaging_product": "whatsapp", "type": mime_type}
+                )
+
+            if not media_upload.ok and "Param file must be a file with one of the following types" in media_upload.text:
+                print(f"Unsupported MIME type '{mime_type}', retrying as text/plain")
+                mime_type = "text/plain"
+                if not fname.endswith(".txt"):
+                    new_fname = fname + ".txt"
+                    os.rename(fname, new_fname)
+                    fname = new_fname
+                    file_name = os.path.basename(fname)
+
+                with open(fname, "rb") as f:
+                    media_upload = requests.post(
+                        "https://graph.facebook.com/v22.0/777113995477023/media",
+                        headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
+                        files={"file": (file_name, f, mime_type)},
+                        data={"messaging_product": "whatsapp", "type": mime_type}
+                    )
+
+            os.remove(fname)
+
+            if not media_upload.ok:
+                return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
+            
+
+
+            media_id = media_upload.json().get("id")
+
+            if mime_type.startswith("image/"):
+                wa_payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone,
+                    "type": "image",
+                    "image": {
+                        "id": media_id,
+                        "caption": msg.get("content", "")
+                    }
+                }
+            else:
+                wa_payload = {
+                    "messaging_product": "whatsapp",
+                    "to": phone,
+                    "type": "document",
+                    "document": {
+                        "id": media_id,
+                        "caption": msg.get("content", ""),
+                        "filename": file_name
+                    }
+                }
+
+            resp = requests.post(
+                "https://graph.facebook.com/v22.0/777113995477023/messages",
+                json=wa_payload,
+                headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
+            )
+
+            _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
+
+            return jsonify({"status":"sent image/document"}), 200
         # ---------------------------------------
 
         if not content:
