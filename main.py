@@ -71,11 +71,13 @@ def _send_zulip_dm_stream(stream: str, topic: str, content: str):
         data={
             "type": "stream",
             "to": stream,
-            "topic": topic
+            "topic": topic,
+            "content": content
         },
         auth = (ZULIP_BOT_EMAIL, ZULIP_API_KEY),
         timeout = 10
     )
+
 
 # Zulip recipient list
 def _recip_list(chat: dict) -> list[str]:
