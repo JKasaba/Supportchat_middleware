@@ -337,7 +337,7 @@ def receive_whatsapp():
         if chat["topic"] != None:
             _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
-        _send_zulip_dm(_recip_list(chat), dm_body)
+        else: _send_zulip_dm(_recip_list(chat), dm_body)
 
     elif msg_type == "image":
         # Upload image to Zulip
@@ -351,7 +351,7 @@ def receive_whatsapp():
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
         if chat["topic"] != None:
             _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
-        _send_zulip_dm(_recip_list(chat), dm_body)
+        else: _send_zulip_dm(_recip_list(chat), dm_body)
 
     elif msg_type == "document":
         zulip_upload = requests.post(
@@ -366,7 +366,7 @@ def receive_whatsapp():
         if chat["topic"] != None:
             _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
-        _send_zulip_dm(_recip_list(chat), dm_body)
+        else: _send_zulip_dm(_recip_list(chat), dm_body)
 
 
     # mark read
