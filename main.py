@@ -341,9 +341,12 @@ def receive_whatsapp():
         _log_line(chat["ticket"], f"Customer to ENG: {text}")
 
         if chat["topic"] != None:
+            print("We are triggering the stream sender")
             _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
-        else: _send_zulip_dm(_recip_list(chat), dm_body)
+        else:
+            print("we are triggering the private message sender")
+            _send_zulip_dm(_recip_list(chat), dm_body)
 
     elif msg_type == "image":
         # Upload image to Zulip
