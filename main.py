@@ -64,6 +64,18 @@ def _send_zulip_dm(recipients: list[str], content: str):
         timeout=10
     )
 
+def _send_zulip_dm_stream(stream: str, topic: str, content: str):
+    return requests.post(
+        ZULIP_API_URL,
+        data={
+            "type": "stream",
+            "to": stream,
+            "topic": topic
+        },
+        auth = (ZULIP_BOT_EMAIL, ZULIP_API_KEY),
+        timeout = 10
+    )
+
 # Zulip recipient list
 def _recip_list(chat: dict) -> list[str]:
     base = [chat["engineer"], ZULIP_BOT_DM_EMAIL]
@@ -85,9 +97,13 @@ def _register_chat(phone: str, ticket_id: int, eng_email: str):
         "engineer": eng_email,
         "slot": slot
     }
+
     db.state["phone_to_chat"][phone] = chat
     active.add(phone)
-    db.state["engineer_to_set"][eng_email] = active
+
+    if eng_email != None:
+        db.state["engineer_to_set"][eng_email] = active
+
     db.save()
     return chat
 
@@ -212,7 +228,14 @@ def receive_whatsapp():
             _do_send_whatsapp(phone,
                 "Thanks! We've received your request. An engineer will respond once available."
             )
+
             pending.pop(phone, None)
+
+            try:
+                chat = _register_chat(phone, 123, None)
+            except RuntimeError:
+                return "Register new chat failed -- stream", 200
+            
             db.save()
             return "", 200
 
