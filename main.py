@@ -84,7 +84,7 @@ def _recip_list(chat: dict) -> list[str]:
     return base
 
 # chat registration
-def _register_chat(phone: str, ticket_id: int, eng_email: str):
+def _register_chat(phone: str, ticket_id: int, eng_email: str, topic: str):
     active = db.state["engineer_to_set"].get(eng_email, set())
 
     if len(active) >= MAX_CHATS:
@@ -95,7 +95,8 @@ def _register_chat(phone: str, ticket_id: int, eng_email: str):
     chat = {
         "ticket": ticket_id,
         "engineer": eng_email,
-        "slot": slot
+        "slot": slot,
+        "topic": topic
     }
 
     db.state["phone_to_chat"][phone] = chat
@@ -232,7 +233,7 @@ def receive_whatsapp():
             pending.pop(phone, None)
 
             try:
-                chat = _register_chat(phone, 123, None)
+                chat = _register_chat(phone, 123, None, f"{phone} | {subject}")
             except RuntimeError:
                 return "Register new chat failed -- stream", 200
             
@@ -317,7 +318,7 @@ def receive_whatsapp():
             return "", 200
 
         try:
-            chat = _register_chat(phone, int(ticket_id), eng_email)
+            chat = _register_chat(phone, int(ticket_id), eng_email, None)
         except RuntimeError:
             return "", 200
 
@@ -332,6 +333,10 @@ def receive_whatsapp():
     if msg_type == "text":
         dm_body = text
         _log_line(chat["ticket"], f"Customer to ENG: {text}")
+
+        if chat["topic"] != None:
+            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
+
         _send_zulip_dm(_recip_list(chat), dm_body)
 
     elif msg_type == "image":
@@ -344,6 +349,8 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[Download Image]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
+        if chat["topic"] != None:
+            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
         _send_zulip_dm(_recip_list(chat), dm_body)
 
     elif msg_type == "document":
@@ -355,6 +362,10 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[{filename}]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
+
+        if chat["topic"] != None:
+            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
+
         _send_zulip_dm(_recip_list(chat), dm_body)
 
 
