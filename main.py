@@ -183,6 +183,9 @@ def receive_whatsapp():
 
     chat = db.state["phone_to_chat"].get(phone)
 
+    if not chat:
+        print("no chat for this phone number")
+
     if not chat and msg_type == "text":
         text = msg["text"]["body"].strip()
         state = pending.get(phone)
@@ -306,27 +309,27 @@ def receive_whatsapp():
 
 
     chat = db.state["phone_to_chat"].get(phone)
-    if not chat:
-        m = INIT_RE.search(text)
-        if not m:
-            _do_send_whatsapp(phone, CLOSED_REPLY)
-            return "", 200          # wait for proper handshake
-        ticket_id, eng_nick = m.groups()
-        eng_email = ENGINEER_EMAIL_MAP.get(eng_nick.lower())
-        if not eng_email:
-            _do_send_whatsapp(phone, "Engineer unknown. Please try later.")
-            return "", 200
+    # if not chat:
+    #     m = INIT_RE.search(text)
+    #     if not m:
+    #         _do_send_whatsapp(phone, CLOSED_REPLY)
+    #         return "", 200          # wait for proper handshake
+    #     ticket_id, eng_nick = m.groups()
+    #     eng_email = ENGINEER_EMAIL_MAP.get(eng_nick.lower())
+    #     if not eng_email:
+    #         _do_send_whatsapp(phone, "Engineer unknown. Please try later.")
+    #         return "", 200
 
-        try:
-            chat = _register_chat(phone, int(ticket_id), eng_email, None)
-        except RuntimeError:
-            return "", 200
+    #     try:
+    #         chat = _register_chat(phone, int(ticket_id), eng_email, None)
+    #     except RuntimeError:
+    #         return "", 200
 
-        _send_zulip_dm(
-            _recip_list(chat),
-            f"WhatsApp chat for *RT #{ticket_id}* (**{phone}**).\n"
-            "Send `!end` to close this chat."
-        )
+    #     _send_zulip_dm(
+    #         _recip_list(chat),
+    #         f"WhatsApp chat for *RT #{ticket_id}* (**{phone}**).\n"
+    #         "Send `!end` to close this chat."
+    #     )
 
     # forward message
     
