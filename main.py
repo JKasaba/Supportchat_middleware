@@ -421,6 +421,7 @@ def receive_zulip():#
         ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
         match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
         if match:
+            relative_url = match.group(1)
             zulip_file_url = f"https://chat-test.filmlight.ltd.uk{relative_url}"
             file_name = os.path.basename(relative_url).split('?')[0]
 
