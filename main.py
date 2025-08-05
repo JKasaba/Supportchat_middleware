@@ -65,6 +65,7 @@ def _send_zulip_dm(recipients: list[str], content: str):
     )
 
 def _send_zulip_dm_stream(stream: str, topic: str, content: str):
+    print(f"Stream: {stream}, Topic: {topic}")
     return requests.post(
         ZULIP_API_URL,
         data={
