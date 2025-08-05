@@ -172,6 +172,8 @@ def receive_whatsapp():
     msg  = (body.get("entry",[{}])[0].get("changes",[{}])[0]
                   .get("value",{}).get("messages",[{}])[0])
     
+    print(msg)
+    
     if not msg:
         return "", 200
 
@@ -308,7 +310,7 @@ def receive_whatsapp():
         return "", 200
 
 
-    chat = db.state["phone_to_chat"].get(phone)
+    #chat = db.state["phone_to_chat"].get(phone)
     # if not chat:
     #     m = INIT_RE.search(text)
     #     if not m:
@@ -334,6 +336,7 @@ def receive_whatsapp():
     # forward message
     
     if msg_type == "text":
+        print(f"Customer to stream: {text}")
         dm_body = text
         _log_line(chat["ticket"], f"Customer to ENG: {text}")
 
