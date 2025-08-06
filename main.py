@@ -442,6 +442,16 @@ def receive_zulip():#
         if not chat:                                         # no active WA chat?
             return jsonify({"status": "no_chat"}), 200
 
+        if "resolved" in topic.lower():
+            print(f"Topic '{topic}' marked as resolved. Pushing transcript for ticket {chat['ticket']}")
+            try:
+                _push_transcript(chat["ticket"])
+            except Exception as e:
+                print("Failed to push transcript:", e)
+            # Optionally, you can end the chat here as well:
+            # _end_chat(phone, chat)
+            return jsonify({"status": "transcript_pushed"}), 200
+
         # drop the leading "@whatsapp-bot" so the customer never sees it
         content = re.sub(r'^@\*\*.*?\*\*\s*', '', msg["content"]).strip()
 
