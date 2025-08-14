@@ -471,6 +471,7 @@ def receive_zulip():#
                 db.state["phone_to_chat"].pop(phone, None)
                 db.save()
                  # sends WA close msg, DMs engineers, pushes transcript, cleans state
+                return jsonify({"status": "chat_ended"}), 200
             except Exception as e:
                 print("Failed to end chat:", e)
                 return jsonify({"status": "end_failed"}), 500
