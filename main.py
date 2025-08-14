@@ -457,6 +457,23 @@ def receive_zulip():#
             # Optionally, you can end the chat here as well:
             # _end_chat(phone, chat)
             return jsonify({"status": "transcript_pushed"}), 200
+        
+        if "!end" in content.lower():
+            try:
+                ticket_id = chat["ticket"]
+
+                _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
+
+                _send_zulip_dm_stream("SupportChat-test", topic, "✋ Chat ended and transcript posted to RT.")
+
+                _push_transcript(ticket_id)
+
+                db.state["phone_to_chat"].pop(phone, None)
+                db.save()
+                 # sends WA close msg, DMs engineers, pushes transcript, cleans state
+            except Exception as e:
+                print("Failed to end chat:", e)
+                return jsonify({"status": "end_failed"}), 500
 
         # ---------- attachment block ----------
         ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
