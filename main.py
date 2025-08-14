@@ -448,7 +448,7 @@ def receive_zulip():#
 
         #push to RT when user requests
 
-        if "!RT" in content.lower():
+        if "!rt" in content.lower():
             print(f"Topic '{topic}' marked as resolved. Pushing transcript for ticket {chat['ticket']}")
             try:
                 _push_transcript(chat["ticket"])
