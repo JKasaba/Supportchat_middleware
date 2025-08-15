@@ -142,61 +142,91 @@ def _register_chat(phone: str, ticket_id: int, eng_email: str, topic: str):
     db.save()
     return chat
 
+# 
+
+import re, html
+from urllib.parse import urljoin
+
+# reuse your existing ZULIP_BASE_URL logic or define it directly
+# ZULIP_BASE_URL = ZULIP_API_URL.split('/api', 1)[0]
+
 def _format_transcript_html(ticket_id: int, lines: list[str]) -> str:
     """
-    Turn your transcript lines into a simple HTML table. We escape content,
-    detect 'Customer/ENG' directions, and convert known links to anchors.
+    Rewritten visual style:
+      - Card-based chat log instead of a table
+      - Colored role pill (Customer → Engineer / Engineer → Customer / Note)
+      - Subtle message index on the right
+      - Minimal inline styles (RT-friendly); readable even if styles are stripped
+      - URL and /user_uploads links are auto-linked
     """
-    rows = []
+    ZULIP_BASE_URL = ZULIP_API_URL.split('/api', 1)[0]
+
+    def linkify(s: str) -> str:
+        s = re.sub(
+            r'(https?://[^\s<]+)',
+            lambda m: f'<a href="{html.escape(m.group(0))}" target="_blank" rel="noopener">{html.escape(m.group(0))}</a>',
+            s,
+        )
+        s = re.sub(
+            r'(/user_uploads/[^\s<]+)',
+            lambda m: f'<a href="{html.escape(urljoin(ZULIP_BASE_URL, m.group(1)))}" target="_blank" rel="noopener">Download</a>',
+            s,
+        )
+        return s
+
+    cards = []
     for i, raw in enumerate(lines, 1):
         direction = "Note"
         content = raw
         link_url = None
+        pill_bg = "#e5e7eb"  # neutral
+        pill_fg = "#111827"
 
-        # Direction + message
         m = re.match(r'^(Customer to ENG|ENG to Customer):\s*(.*)$', raw, re.I)
         if m:
-            direction = m.group(1).replace("ENG", "Engineer")
+            direction_key = m.group(1).lower()
+            if "customer to eng" in direction_key:
+                direction = "Customer → Engineer"
+                pill_bg, pill_fg = "#dbeafe", "#1e3a8a"  # blue
+            else:
+                direction = "Engineer → Customer"
+                pill_bg, pill_fg = "#dcfce7", "#14532d"  # green
             content = m.group(2)
 
-        # Customer sent image/file lines: "... <URI>"
         m2 = re.match(r'^Customer sent (?:image|file):\s*(.*?)(?:\s*<(.+?)>)?\s*$', raw, re.I)
         if m2:
             direction = "Customer → Engineer"
+            pill_bg, pill_fg = "#dbeafe", "#1e3a8a"
             content = m2.group(1)
             link_url = m2.group(2)
 
-        # Engineer sent file lines
         m3 = re.match(r'^ENG sent file:\s*(.*?)(?:\s*\(as [^)]+\))?$', raw, re.I)
         if m3:
             direction = "Engineer → Customer"
+            pill_bg, pill_fg = "#dcfce7", "#14532d"
             content = m3.group(1)
 
-        # Escape + newlines to <br>
-        safe = html.escape(content).replace('\n', '<br>')
+        safe = html.escape(content).replace("\n", "<br>")
 
-        # Attach explicit link if present
         if link_url:
-            if link_url.startswith('/'):
+            if link_url.startswith("/"):
                 link_url = urljoin(ZULIP_BASE_URL, link_url)
             safe += f'<br><a href="{html.escape(link_url)}" target="_blank" rel="noopener">Download</a>'
         else:
-            # Auto-link http(s) URLs
-            safe = re.sub(r'(https?://[^\s<]+)',
-                          lambda m: f'<a href="{html.escape(m.group(0))}" target="_blank" rel="noopener">{html.escape(m.group(0))}</a>',
-                          safe)
-            # Auto-link Zulip /user_uploads/ relative paths
-            safe = re.sub(r'(/user_uploads/[^\s<]+)',
-                          lambda m: f'<a href="{html.escape(urljoin(ZULIP_BASE_URL, m.group(1)))}" target="_blank" rel="noopener">Download</a>',
-                          safe)
+            safe = linkify(safe)
 
-        rows.append(
-            f'<tr>'
-            f'<td style="white-space:nowrap;">{i}</td>'
-            f'<td style="white-space:nowrap;">{html.escape(direction)}</td>'
-            f'<td>{safe}</td>'
-            f'</tr>'
-        )
+        card = f"""
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin:10px 0;background:#ffffff;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="display:inline-block;padding:3px 10px;border-radius:999px;background:{pill_bg};color:{pill_fg};font-size:12px;font-weight:600;">
+              {html.escape(direction)}
+            </span>
+            <span style="font-size:12px;color:#6b7280;">#{i}</span>
+          </div>
+          <div style="font-size:14px;color:#111827;line-height:1.5;">{safe}</div>
+        </div>
+        """
+        cards.append(card)
 
     return f"""<!DOCTYPE html>
 <html>
@@ -204,16 +234,17 @@ def _format_transcript_html(ticket_id: int, lines: list[str]) -> str:
   <meta charset="utf-8">
   <title>Transcript #{ticket_id}</title>
 </head>
-<body>
-  <h3>WhatsApp ↔ Zulip Transcript</h3>
-  <table border="1" cellpadding="6" cellspacing="0">
-    <thead><tr><th>#</th><th>Direction</th><th>Message</th></tr></thead>
-    <tbody>
-      {''.join(rows)}
-    </tbody>
-  </table>
+<body style="background:#f9fafb;margin:0;padding:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;">
+  <div style="max-width:820px;margin:24px auto;padding:0 16px;">
+    <div style="margin-bottom:14px;">
+      <h2 style="margin:0 0 6px 0;font-size:20px;color:#111827;">WhatsApp ↔ Zulip Transcript</h2>
+      <div style="font-size:13px;color:#6b7280;">Ticket #{ticket_id}</div>
+    </div>
+    {''.join(cards)}
+  </div>
 </body>
 </html>"""
+
 
 
 def _push_transcript(ticket_id: int):
