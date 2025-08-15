@@ -3,6 +3,8 @@ import os, re, requests, db, json, uuid
 import textwrap
 import re
 import mimetypes
+import html
+from urllib.parse import urljoin
 
 
 app = Flask(__name__)
@@ -17,6 +19,7 @@ WEBHOOK_VERIFY_TOKEN  = os.environ["WEBHOOK_VERIFY_TOKEN"]
 PORT                  = int(os.getenv("PORT", 5000))
 
 ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
+ZULIP_BASE_URL = ZULIP_API_URL.split('/api', 1)[0] 
 MAX_CHATS     = 2                       # slot0 and slot1 only
 CLOSED_REPLY = "Chat closed, please contact support to start a new chat."
 # eng to email map
@@ -139,34 +142,133 @@ def _register_chat(phone: str, ticket_id: int, eng_email: str, topic: str):
     db.save()
     return chat
 
+def _format_transcript_html(ticket_id: int, lines: list[str]) -> str:
+    """
+    Turn your transcript lines into a simple HTML table. We escape content,
+    detect 'Customer/ENG' directions, and convert known links to anchors.
+    """
+    rows = []
+    for i, raw in enumerate(lines, 1):
+        direction = "Note"
+        content = raw
+        link_url = None
+
+        # Direction + message
+        m = re.match(r'^(Customer to ENG|ENG to Customer):\s*(.*)$', raw, re.I)
+        if m:
+            direction = m.group(1).replace("ENG", "Engineer")
+            content = m.group(2)
+
+        # Customer sent image/file lines: "... <URI>"
+        m2 = re.match(r'^Customer sent (?:image|file):\s*(.*?)(?:\s*<(.+?)>)?\s*$', raw, re.I)
+        if m2:
+            direction = "Customer → Engineer"
+            content = m2.group(1)
+            link_url = m2.group(2)
+
+        # Engineer sent file lines
+        m3 = re.match(r'^ENG sent file:\s*(.*?)(?:\s*\(as [^)]+\))?$', raw, re.I)
+        if m3:
+            direction = "Engineer → Customer"
+            content = m3.group(1)
+
+        # Escape + newlines to <br>
+        safe = html.escape(content).replace('\n', '<br>')
+
+        # Attach explicit link if present
+        if link_url:
+            if link_url.startswith('/'):
+                link_url = urljoin(ZULIP_BASE_URL, link_url)
+            safe += f'<br><a href="{html.escape(link_url)}" target="_blank" rel="noopener">Download</a>'
+        else:
+            # Auto-link http(s) URLs
+            safe = re.sub(r'(https?://[^\s<]+)',
+                          lambda m: f'<a href="{html.escape(m.group(0))}" target="_blank" rel="noopener">{html.escape(m.group(0))}</a>',
+                          safe)
+            # Auto-link Zulip /user_uploads/ relative paths
+            safe = re.sub(r'(/user_uploads/[^\s<]+)',
+                          lambda m: f'<a href="{html.escape(urljoin(ZULIP_BASE_URL, m.group(1)))}" target="_blank" rel="noopener">Download</a>',
+                          safe)
+
+        rows.append(
+            f'<tr>'
+            f'<td style="white-space:nowrap;">{i}</td>'
+            f'<td style="white-space:nowrap;">{html.escape(direction)}</td>'
+            f'<td>{safe}</td>'
+            f'</tr>'
+        )
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Transcript #{ticket_id}</title>
+</head>
+<body>
+  <h3>WhatsApp ↔ Zulip Transcript</h3>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead><tr><th>#</th><th>Direction</th><th>Message</th></tr></thead>
+    <tbody>
+      {''.join(rows)}
+    </tbody>
+  </table>
+</body>
+</html>"""
+
+
 def _push_transcript(ticket_id: int):
     lines = db.state["transcripts"].get(str(ticket_id), [])
     if not lines:
         return
+    
+    html_body = _format_transcript_html(ticket_id, lines)
 
-    lines_text = "\n\n".join(lines)
-    body = (
-        "Chat transcript imported by WA-Zulip bridge.\n\n"
-        + "-"*60 + "\n"
-        + lines_text + "\n"
-        + "-"*60
-    )
+    url = f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment"
+    headers_base = {"Authorization": f"token {os.environ['RT_TOKEN']}"}
 
+    # Preferred: RT REST2 JSON with ContentType=text/html
     resp = requests.post(
-        f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
-        headers={
-            "Authorization": f"token {os.environ['RT_TOKEN']}",
-            "Content-Type": "text/plain",     
-                 },
-        data = body.encode("utf-8)")
+        url,
+        headers={**headers_base, "Content-Type": "application/json"},
+        json={"ContentType": "text/html", "Content": html_body},
+        timeout=15,
     )
+
+    # Fallback: some setups accept raw body with request Content-Type text/html
+    if resp.status_code != 201:
+        resp = requests.post(
+            url,
+            headers={**headers_base, "Content-Type": "text/html"},
+            data=html_body.encode("utf-8"),
+            timeout=15,
+        )
+
+
+
+    # lines_text = "\n\n".join(lines)
+    # body = (
+    #     "Chat transcript imported by WA-Zulip bridge.\n\n"
+    #     + "-"*60 + "\n"
+    #     + lines_text + "\n"
+    #     + "-"*60
+    # )
+
+    # resp = requests.post(
+    #     f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
+    #     headers={
+    #         "Authorization": f"token {os.environ['RT_TOKEN']}",
+    #         "Content-Type": "text/plain",     
+    #              },
+    #     data = body.encode("utf-8)")
+    # )
+
     if resp.status_code != 201:
         print("RT comment failed:", resp.status_code, resp.text)
         return
 
     # on success, drop transcript
     db.state["transcripts"].pop(str(ticket_id), None)
-
+    db.save()
 
 def _end_chat(phone: str, chat: dict):
     ticket_id = chat["ticket"]
