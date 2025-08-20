@@ -200,18 +200,19 @@ def _format_transcript_html(ticket_id: int, lines: list[str]) -> str:
             content = m2.group(1)
             link_url = m2.group(2)
 
-        m3 = re.match(r'^ENG sent file:\s*(.*?)(?:\s*\(as [^)]+\))?$', raw, re.I)
+        m3 = re.match(r'^ENG sent file:\s*(.*?)(?:\s*\(as [^)]+\))?(?:\s*<(.+?)>)?\s*$', raw, re.I)
         if m3:
             direction = "Engineer → Customer"
             pill_bg, pill_fg = "#dcfce7", "#14532d"
             content = m3.group(1)
+            link_url = m3.group(2)
 
         safe = html.escape(content).replace("\n", "<br>")
 
         if link_url:
             if link_url.startswith("/"):
                 link_url = urljoin(ZULIP_BASE_URL, link_url)
-            safe += f'<br><a href="{html.escape(link_url)}" target="_blank" rel="noopener">Download</a>'
+            safe += f'<br><a href="{html.escape(link_url)}" target="_blank" rel="noopener">Link to Media</a>'
         else:
             safe = linkify(safe)
 
