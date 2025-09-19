@@ -5,6 +5,7 @@ import re
 import mimetypes
 import html
 from urllib.parse import urljoin
+import time
 
 
 app = Flask(__name__)
@@ -20,8 +21,9 @@ PORT                  = int(os.getenv("PORT", 5000))
 
 ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 ZULIP_BASE_URL = ZULIP_API_URL.split('/api', 1)[0] 
-MAX_CHATS     = 2                       # slot0 and slot1 only
+MAX_CHATS     = 2                       # slot0 and slot1 only
 CLOSED_REPLY = "Chat closed, please contact support to start a new chat."
+CHAT_TTL_SECONDS = 60 * 10  # 10 Minutes (will be 24 hours when implemented)
 # eng to email map
 ENGINEER_EMAIL_MAP = {
     k[len("ENGINEER_EMAIL_"):].lower(): v
@@ -123,6 +125,7 @@ def _register_chat(phone: str, ticket_id: int | None, eng_email: str | None, top
     chat = {
         "ticket": ticket_id,
         "topic": topic,
+        "last_customer_ts": time.time(),  # start timer at creation (the customer just sent a message)
     }
 
     db.state["phone_to_chat"][phone] = chat
@@ -291,6 +294,36 @@ def _end_chat(phone: str, chat: dict):
     db.state["phone_to_chat"].pop(phone, None)
     db.save()
 
+def _cleanup_expired_chats():
+    now = time.time()
+    expired = []
+    for phone, chat in list(db.state.get("phone_to_chat", {}).items()):
+        last_ts = chat.get("last_customer_ts")
+        if last_ts and (now - last_ts) > CHAT_TTL_SECONDS:
+            expired.append((phone, chat))
+    for phone, chat in expired:
+        topic = chat.get("topic")
+        try:
+            if topic:
+                _send_zulip_dm_stream(
+                    "SupportChat-test",
+                    topic,
+                    "⏳ Chat expired after 24h of no customer messages. Pushing transcript to RT and cleaning up."
+                )
+        except Exception as e:
+            print("Stream notify failed during cleanup:", e)
+
+        # Push transcript before removing the chat
+        try:
+            _push_transcript(chat["ticket"])
+            print(f"Pushed transcript to RT for expired chat ticket {chat['ticket']}")
+        except Exception as e:
+            print("Could not push transcript during cleanup:", e)
+
+        db.state["phone_to_chat"].pop(phone, None)
+    if expired:
+        db.save()
+
 
 # WhatsApp webhook
 @app.get("/webhook")
@@ -302,6 +335,7 @@ def verify_webhook():
 
 @app.post("/webhook")
 def receive_whatsapp():
+    _cleanup_expired_chats()
     body = request.get_json(force=True)
     msg  = (body.get("entry",[{}])[0].get("changes",[{}])[0]
                   .get("value",{}).get("messages",[{}])[0])
@@ -473,6 +507,9 @@ def receive_whatsapp():
         print(f"Customer to stream: {text}")
         dm_body = text
         _log_line(chat["ticket"], f"Customer to ENG: {text}")
+        # update last customer activity
+        chat["last_customer_ts"] = time.time()
+        db.save()
         _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
     elif msg_type == "image":
@@ -485,6 +522,8 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[Download Image]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
+        chat["last_customer_ts"] = time.time()
+        db.save()
         _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
     elif msg_type == "document":
@@ -496,6 +535,8 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[{filename}]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
+        chat["last_customer_ts"] = time.time()
+        db.save()
         _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
 
@@ -510,6 +551,7 @@ def receive_whatsapp():
 # Zulip webhook
 @app.post("/webhook/zulip")
 def receive_zulip():
+    _cleanup_expired_chats()
     payload = request.get_json(force=True)
     msg = payload.get("message", {})
     sender = msg.get("sender_email")
