@@ -114,31 +114,18 @@ def _recip_list(chat: dict) -> list[str]:
     return base
 
 # chat registration
-def _register_chat(phone: str, ticket_id: int, eng_email: str, topic: str):
-    active = db.state["engineer_to_set"].get(eng_email, set())
-
-    if len(active) >= MAX_CHATS:
-        _do_send_whatsapp(phone, "All agents busy, please try again later.")
-        raise RuntimeError("engineer_busy")
-    
-    # Logic for empty ticket field -- this was a ticket started on whatsapp
-    if ticket_id == None:
+def _register_chat(phone: str, ticket_id: int | None, eng_email: str | None, topic: str):
+    # Create RT ticket if started from WhatsApp (no preexisting ticket)
+    if ticket_id is None:
         ticket_id = _create_rt_ticket(topic, "Whatsapp Bridge", "New Ticket from Whatsapp")
 
-    slot = 0 if not active else 1            # slot0 first, slot1 second
+    # Minimal chat state for stream-only flow
     chat = {
         "ticket": ticket_id,
-        "engineer": eng_email,
-        "slot": slot,
-        "topic": topic
+        "topic": topic,
     }
 
     db.state["phone_to_chat"][phone] = chat
-    active.add(phone)
-
-    if eng_email != None:
-        db.state["engineer_to_set"][eng_email] = active
-
     db.save()
     return chat
 
@@ -276,24 +263,6 @@ def _push_transcript(ticket_id: int):
         )
 
 
-
-    # lines_text = "\n\n".join(lines)
-    # body = (
-    #     "Chat transcript imported by WA-Zulip bridge.\n\n"
-    #     + "-"*60 + "\n"
-    #     + lines_text + "\n"
-    #     + "-"*60
-    # )
-
-    # resp = requests.post(
-    #     f"{os.environ['RT_BASE_URL'].rstrip('/')}/ticket/{ticket_id}/comment",
-    #     headers={
-    #         "Authorization": f"token {os.environ['RT_TOKEN']}",
-    #         "Content-Type": "text/plain",     
-    #              },
-    #     data = body.encode("utf-8)")
-    # )
-
     if resp.status_code != 201:
         print("RT comment failed:", resp.status_code, resp.text)
         return
@@ -304,22 +273,22 @@ def _push_transcript(ticket_id: int):
 
 def _end_chat(phone: str, chat: dict):
     ticket_id = chat["ticket"]
-    eng = chat["engineer"]
+    topic = chat.get("topic")
 
-    # tell customer + engineer
+    # notify customer + stream
     _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
-    _send_zulip_dm(_recip_list(chat), f"✌️ Chat with **{phone}** closed.")
+    if topic:
+        _send_zulip_dm_stream("SupportChat-test", topic, "✌️ Chat with customer closed. Transcript will be posted to RT.")
 
-    # post transcript to RT
+    # push transcript to RT
     try:
         _push_transcript(ticket_id)
-        print("Pushing Transcript to RT")
+        print("Pushed transcript to RT")
     except Exception as e:
         print("Could not push transcript to RT:", e)
 
     # clean up state
     db.state["phone_to_chat"].pop(phone, None)
-    db.state["engineer_to_set"].get(eng, set()).discard(phone)
     db.save()
 
 
@@ -504,14 +473,7 @@ def receive_whatsapp():
         print(f"Customer to stream: {text}")
         dm_body = text
         _log_line(chat["ticket"], f"Customer to ENG: {text}")
-
-        if chat["topic"] != None:
-            print("We are triggering the stream sender")
-            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
-
-        else:
-            print("we are triggering the private message sender")
-            _send_zulip_dm(_recip_list(chat), dm_body)
+        _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
     elif msg_type == "image":
         # Upload image to Zulip
@@ -523,9 +485,7 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[Download Image]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent image: {caption} <{upload_uri}>")
-        if chat["topic"] != None:
-            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
-        else: _send_zulip_dm(_recip_list(chat), dm_body)
+        _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
     elif msg_type == "document":
         zulip_upload = requests.post(
@@ -536,11 +496,7 @@ def receive_whatsapp():
         upload_uri = zulip_upload.json().get("uri", "")
         dm_body = f"[{filename}]({upload_uri})\n{caption}"
         _log_line(chat["ticket"], f"Customer sent file: {caption} <{upload_uri}>")
-
-        if chat["topic"] != None:
-            _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
-
-        else: _send_zulip_dm(_recip_list(chat), dm_body)
+        _send_zulip_dm_stream("SupportChat-test", chat["topic"], dm_body)
 
 
     # mark read
@@ -553,191 +509,43 @@ def receive_whatsapp():
 
 # Zulip webhook
 @app.post("/webhook/zulip")
-def receive_zulip():#
+def receive_zulip():
     payload = request.get_json(force=True)
-    msg     = payload.get("message", {})
-    #trigger  = payload.get("trigger")
-    sender  = msg.get("sender_email")
+    msg = payload.get("message", {})
+    sender = msg.get("sender_email")
 
-    print("Incoming Zulip message:", json.dumps(msg, indent=2)) 
+    print("Incoming Zulip message:", json.dumps(msg, indent=2))
 
-    
     if sender == ZULIP_BOT_EMAIL:
         return jsonify({"status":"ignored_bot"}), 200
-    
-    if msg.get("type") == "stream":
-        print("Stream is being triggered")
-        topic = msg.get("topic") or msg.get("subject")       # Zulip ≥3.0 uses 'topic'
-        print(f"topic: {topic}")
-        phone = topic.split("|", 1)[0].strip()    
-        print(f"phone: {phone}")           # "12015551234 | Subject"
-        chat  = db.state["phone_to_chat"].get(phone)
 
-        if not chat:                                         # no active WA chat?
-            return jsonify({"status": "no_chat"}), 200
+    # Only handle stream messages
+    if msg.get("type") != "stream":
+        return jsonify({"status":"ignored_non_stream"}), 200
 
-        # drop the leading "@whatsapp-bot" so the customer never sees it
-        content = re.sub(r'^@\*\*.*?\*\*\s*', '', msg["content"]).strip()
+    topic = msg.get("topic") or msg.get("subject")
+    phone = (topic or "").split("|", 1)[0].strip()
+    chat  = db.state["phone_to_chat"].get(phone)
+    if not chat:
+        return jsonify({"status": "no_chat"}), 200
 
+    # strip leading @**bot** mentions
+    content = re.sub(r'^@\*\*.*?\*\*\s*', '', msg.get("content", "")).strip()
 
-        #push to RT when user requests
+    # Commands
+    if "!rt" in content.lower():
+        try:
+            _push_transcript(chat["ticket"])
+        except Exception as e:
+            print("Failed to push transcript:", e)
+        return jsonify({"status": "transcript_pushed"}), 200
 
-        if "!rt" in content.lower():
-            print(f"Topic '{topic}' marked as resolved. Pushing transcript for ticket {chat['ticket']}")
-            try:
-                _push_transcript(chat["ticket"])
-            except Exception as e:
-                print("Failed to push transcript:", e)
-            # Optionally, you can end the chat here as well:
-            # _end_chat(phone, chat)
-            return jsonify({"status": "transcript_pushed"}), 200
-        
-        if "!end" in content.lower():
-            try:
-                ticket_id = chat["ticket"]
+    if "!end" in content.lower():
+        _end_chat(phone, chat)
+        return jsonify({"status": "chat_ended"}), 200
 
-                _do_send_whatsapp(phone, "Chat closed by engineer. Thank you!")
-
-                _send_zulip_dm_stream("SupportChat-test", topic, "✋ Chat ended and transcript posted to RT.")
-
-                _push_transcript(ticket_id)
-
-                db.state["phone_to_chat"].pop(phone, None)
-                db.save()
-                 # sends WA close msg, DMs engineers, pushes transcript, cleans state
-                return jsonify({"status": "chat_ended"}), 200
-            except Exception as e:
-                print("Failed to end chat:", e)
-                return jsonify({"status": "end_failed"}), 500
-
-        # ---------- attachment block ----------
-        ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
-        match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
-        if match:
-            relative_url = match.group(1)
-            zulip_file_url = f"https://chat-test.filmlight.ltd.uk{relative_url}"
-            file_name = os.path.basename(relative_url).split('?')[0]
-
-            # Download the image
-            image_resp = requests.get(
-                zulip_file_url,
-                auth=(ZULIP_BOT_EMAIL, ZULIP_API_KEY),
-                stream=True,
-                timeout=10
-            )
-
-            if not image_resp.ok:
-                return jsonify({"status": "zulip_download_failed"}), 500
-
-            # Save to temp file
-            fname = f"/tmp/{uuid.uuid4()}_{file_name}"
-            with open(fname, "wb") as f:
-                for chunk in image_resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            # Upload to WhatsApp
-            mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
-
-            with open(fname, "rb") as f:
-                media_upload = requests.post(
-                    "https://graph.facebook.com/v22.0/777113995477023/media",
-                    headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
-                    files={"file": (os.path.basename(fname), f, mime_type)},
-                    data={"messaging_product": "whatsapp", "type": mime_type}
-                )
-
-            if not media_upload.ok and "Param file must be a file with one of the following types" in media_upload.text:
-                print(f"Unsupported MIME type '{mime_type}', retrying as text/plain")
-                mime_type = "text/plain"
-                if not fname.endswith(".txt"):
-                    new_fname = fname + ".txt"
-                    os.rename(fname, new_fname)
-                    fname = new_fname
-                    file_name = os.path.basename(fname)
-
-                with open(fname, "rb") as f:
-                    media_upload = requests.post(
-                        "https://graph.facebook.com/v22.0/777113995477023/media",
-                        headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"},
-                        files={"file": (file_name, f, mime_type)},
-                        data={"messaging_product": "whatsapp", "type": mime_type}
-                    )
-
-            os.remove(fname)
-
-            if not media_upload.ok:
-                return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
-            
-
-
-            media_id = media_upload.json().get("id")
-
-            if mime_type.startswith("image/"):
-                wa_payload = {
-                    "messaging_product": "whatsapp",
-                    "to": phone,
-                    "type": "image",
-                    "image": {
-                        "id": media_id,
-                        "caption": msg.get("content", "")
-                    }
-                }
-            else:
-                wa_payload = {
-                    "messaging_product": "whatsapp",
-                    "to": phone,
-                    "type": "document",
-                    "document": {
-                        "id": media_id,
-                        "caption": msg.get("content", ""),
-                        "filename": file_name
-                    }
-                }
-
-            resp = requests.post(
-                "https://graph.facebook.com/v22.0/777113995477023/messages",
-                json=wa_payload,
-                headers={"Authorization": f"Bearer {GRAPH_API_TOKEN}"}
-            )
-
-            _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
-
-            return jsonify({"status":"sent image/document"}), 200
-        # ---------------------------------------
-
-        if not content:
-            return jsonify({"status": "empty"}), 200
-
-        _log_line(chat["ticket"], f"ENG to Customer: {content}")
-        print(f"Phone = {phone} Content = {content}")
-        resp = _do_send_whatsapp(phone, content)
-        return jsonify({"status":"sent" if resp.ok else "error", 
-                        "response":resp.json()}), (200 if resp.ok else 500)
-
-
-
-    
-    if msg.get("type") != "private":
-        return jsonify({"status":"ignored"}), 200
-
-
-    phones = db.state["engineer_to_set"].get(sender, set())
-    if not phones:
-        return jsonify({"status":"no_active"}), 200
-
-    # figure out which DM tab (slot) this message belongs to
-    recips = [p["email"] for p in msg["display_recipient"]]
-    slot = 1 if ZULIP_EXTRA_BOT_EMAIL in recips else 0
-    phone = next((p for p in phones if db.state["phone_to_chat"][p]["slot"] == slot), None)
-    if not phone:
-        return jsonify({"error":"no_slot_match"}), 200
-
-    chat = db.state["phone_to_chat"][phone]
-    content = msg["content"].strip()
-
-    # Check if Zulip message includes an uploaded file
+    # ---------- attachment block ----------
     ZULIP_UPLOAD_RE = re.compile(r"\[.*?\]\((/user_uploads/.*?)\)")
-
     match = ZULIP_UPLOAD_RE.search(msg.get("content", ""))
     if match:
         relative_url = match.group(1)
@@ -793,7 +601,7 @@ def receive_zulip():#
 
         if not media_upload.ok:
             return jsonify({"status": "media_upload_failed", "details": media_upload.text}), 500
-        
+            
 
 
         media_id = media_upload.json().get("id")
@@ -828,14 +636,13 @@ def receive_zulip():#
 
         _log_line(chat["ticket"], f"ENG sent file: {file_name} (as {mime_type})")   
 
-        return jsonify({"status":"sent image/document"}), 200   
-    
-    if content.lower() == "!end":
-        _end_chat(phone, chat)
-        return jsonify({"status":"ended"}), 200
-    
-    _log_line(chat["ticket"], f"ENG to Customer: {content}")
+        return jsonify({"status":"sent image/document"}), 200
+    # ---------- end attachment block ----------
 
+    if not content:
+        return jsonify({"status": "empty"}), 200
+
+    _log_line(chat["ticket"], f"ENG to Customer: {content}")
     resp = _do_send_whatsapp(phone, content)
     return jsonify({"status":"sent" if resp.ok else "error",
                     "response":resp.json()}), (200 if resp.ok else 500)
