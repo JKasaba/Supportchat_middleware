@@ -23,7 +23,7 @@ ZULIP_API_URL = "https://chat-test.filmlight.ltd.uk/api/v1/messages"
 ZULIP_BASE_URL = ZULIP_API_URL.split('/api', 1)[0] 
 MAX_CHATS     = 2                       # slot0 and slot1 only
 CLOSED_REPLY = "Chat closed, please contact support to start a new chat."
-CHAT_TTL_SECONDS = 60 * 10  # 10 Minutes (will be 24 hours when implemented)
+CHAT_TTL_SECONDS = 60 * 60 * 4  # 4 hours (will be 24 hours when implemented)
 # eng to email map
 ENGINEER_EMAIL_MAP = {
     k[len("ENGINEER_EMAIL_"):].lower(): v
